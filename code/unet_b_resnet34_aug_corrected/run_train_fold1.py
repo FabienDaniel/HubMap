@@ -1,20 +1,24 @@
 import os
+
+from code.common import COMMON_STRING, DataLoader, RandomSampler, SequentialSampler, time_to_str
+from code.data_preprocessing.dataset_v2020_11_12 import HuDataset, make_image_id, null_collate
+from code.lib.include import PROJECT_PATH, IDENTIFIER
+from code.lib.utility.file import Logger
+
 os.environ['CUDA_VISIBLE_DEVICES']='0'
 
-import os, sys
+import numpy as np
 
-# sys.path.append(os.path.dirname(__file__))
-sys.path.append('/home/fabien/Kaggle/HuBMAP/HengCherKeng/2020-12-11/code/dummy_01/')
+from code.unet_b_resnet34_aug_corrected.model   import Net
+from code.unet_b_resnet34_aug_corrected.image_preprocessing import do_random_crop, do_random_rotate_crop, do_random_scale_crop, do_random_hsv, \
+    do_random_contast, do_random_gain, do_random_noise, do_random_flip_transpose
 
-for _path in sys.path:
-    print(_path)
+from code.lib.net.lookahead import *
+from code.lib.net.radam import *
+from timeit import default_timer as timer
 
-from common  import *
-from model   import *
-from dataset import *
+import torch.nn as nn
 
-from lib.net.lookahead import *
-from lib.net.radam import *
 
 import torch.cuda.amp as amp
 class AmpNet(Net):
@@ -25,8 +29,6 @@ class AmpNet(Net):
 
 is_mixed_precision = True
 
-
-print("here")
 
 #################################################################################################
 
@@ -131,9 +133,13 @@ def run_train():
 
     print(PROJECT_PATH)
     print(IDENTIFIER)
+
     # sys.exit()
     # FD. verifier l'utilité:
     # backup_project_as_zip(PROJECT_PATH, out_dir +'/backup/code.train.%s.zip' % IDENTIFIER)
+
+    import sys
+    sys.exit()
 
     log = Logger()
     log.open(out_dir+'/log.train.txt',mode='a')
@@ -267,9 +273,9 @@ def run_train():
 
         text = \
             '%0.5f  %5.2f%s %4.2f | '%(rate, iteration/1000, asterisk, epoch,) +\
-            '%4.3f  %4.3f  %4.3f  %4.3f  | '%(*valid_loss,) +\
+            '%4.3f  %4.3f  %4.3f  %4.3f  | ' % (*valid_loss,) +\
             '%4.3f  %4.3f   | '%(*loss,) +\
-            '%s' % (time_to_str(timer() - start_timer,'min'))
+            '%s' % (time_to_str(timer() - start_timer, 'min'))
 
         return text
 

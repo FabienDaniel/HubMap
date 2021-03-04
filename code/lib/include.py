@@ -1,6 +1,6 @@
 import os
 from datetime import datetime
-PROJECT_PATH = os.path.dirname(os.path.realpath(__file__).replace('/lib',''))
+PROJECT_PATH = os.path.dirname(os.path.realpath(__file__).replace('/lib', ''))
 IDENTIFIER   = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
 
 #-----------------------------------

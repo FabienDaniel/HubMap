@@ -92,28 +92,30 @@ def run_make_train_tile(train_tile_dir):
         #------
 
 
-#make tile train image
+#############################
+# make tile train image
+#############################
 def run_make_train_mask():
 
     df_train = pd.read_csv(data_dir + '/train.csv')
     print(df_train)
     print(df_train.shape)
 
-    for i in range(0,len(df_train)):
-        id, encoding = df_train.iloc[i]
+    for i in range(0, len(df_train)):
+        _id, encoding = df_train.iloc[i]
 
-        image_file = data_dir + '/train/%s.tiff' % id
+        image_file = data_dir + '/train/%s.tiff' % _id
         image = read_tiff(image_file)
 
         height, width = image.shape[:2]
         mask = rle_decode(encoding, height, width, 255)
 
-        cv2.imwrite(data_dir + '/train/%s.mask.png' % id, mask)
+        cv2.imwrite(data_dir + '/train/%s.mask.png' % _id, mask)
 
 
 # main #################################################################
 if __name__ == '__main__':
 
     run_make_train_tile(
-        train_tile_dir = project_repo + '/data/tile/0.25_320_train'
+        train_tile_dir = project_repo + f'/data/tile/{tile_scale}_{tile_size}_train'
     )

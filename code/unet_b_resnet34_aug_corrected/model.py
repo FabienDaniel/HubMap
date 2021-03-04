@@ -1,10 +1,10 @@
 
-from common import *
+from code.common import *
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from b_resnet34 import *
+from code.unet_b_resnet34_aug_corrected.b_resnet34 import *
 #from lovasz import _lovasz_softmax
 # https://discourse.aicrowd.com/t/explainer-pytorch-starter-0-857-f1-score-on-public-lb/3790
 

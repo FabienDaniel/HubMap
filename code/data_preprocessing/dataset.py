@@ -1,9 +1,5 @@
 from code.common import *
 import tifffile as tiff
-import json
-
-# raw_data_dir = '/home/fabien/Kaggle/HuBMAP/input/'
-# data_dir = '/home/fabien/Kaggle/HuBMAP/HengCherKeng/2020-12-02/data/'
 
 
 def read_tiff(image_file):
