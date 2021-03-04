@@ -2,20 +2,24 @@ import os
 
 from code.common import COMMON_STRING, DataLoader, RandomSampler, SequentialSampler, time_to_str
 from code.data_preprocessing.dataset_v2020_11_12 import HuDataset, make_image_id, null_collate
-from code.lib.include import PROJECT_PATH, IDENTIFIER
+from code.lib.include import IDENTIFIER
 from code.lib.utility.file import Logger
 
 os.environ['CUDA_VISIBLE_DEVICES']='0'
 
 import numpy as np
 
-from code.unet_b_resnet34_aug_corrected.model   import Net
-from code.unet_b_resnet34_aug_corrected.image_preprocessing import do_random_crop, do_random_rotate_crop, do_random_scale_crop, do_random_hsv, \
-    do_random_contast, do_random_gain, do_random_noise, do_random_flip_transpose
+from code.unet_b_resnet34_aug_corrected.model   import Net, np_binary_cross_entropy_loss, np_dice_score, \
+    np_accuracy, criterion_binary_cross_entropy
+from code.unet_b_resnet34_aug_corrected.image_preprocessing import do_random_crop, do_random_rotate_crop, \
+    do_random_scale_crop, do_random_hsv, do_random_contast, do_random_gain, do_random_noise, \
+    do_random_flip_transpose
 
 from code.lib.net.lookahead import *
 from code.lib.net.radam import *
+from code.lib.net.rate import *
 from timeit import default_timer as timer
+from torch.nn.parallel.data_parallel import data_parallel
 
 import torch.nn as nn
 
@@ -118,49 +122,44 @@ def do_valid(net, valid_loader):
 ### Train
 ###################################################################################
 
-def run_train():
+def run_train(show_valid_images=False,
+              ):
 
     fold = 1
-    out_dir = 'fold%d' % fold
-    initial_checkpoint = out_dir+'/checkpoint/00004000_model.pth'
+    out_dir = 'result/Baseline/fold%d' % fold
+    initial_checkpoint = None # out_dir + '/checkpoint/00004000_model.pth'
 
     start_lr = 0.001
     batch_size = 32
 
+    ##################################################
     ## setup  ----------------------------------------
+    ##################################################
     for f in ['checkpoint', 'train', 'valid', 'backup']:
         os.makedirs(out_dir + '/' + f, exist_ok=True)
 
-    print(PROJECT_PATH)
-    print(IDENTIFIER)
-
-    # sys.exit()
-    # FD. verifier l'utilité:
-    # backup_project_as_zip(PROJECT_PATH, out_dir +'/backup/code.train.%s.zip' % IDENTIFIER)
-
-    import sys
-    sys.exit()
-
     log = Logger()
-    log.open(out_dir+'/log.train.txt',mode='a')
+    log.open(out_dir + '/log.train.txt', mode='a')
     log.write('\n--- [START %s] %s\n\n' % (IDENTIFIER, '-' * 64))
     log.write('\t%s\n' % COMMON_STRING)
     log.write('\t__file__ = %s\n' % __file__)
     log.write('\tout_dir  = %s\n' % out_dir)
     log.write('\n')
 
-    ## dataset ----------------------------------------
+    ##################################################
+    ## dataset ---------------------------------------
+    ##################################################
     log.write('** dataset setting **\n')
-
 
     train_dataset = HuDataset(
         image_id=[
-            make_image_id('train-%d'%fold),
+            make_image_id('train-%d' % fold),
         ],
         image_dir=[
-            '0.25_480_240_train_corrected',
+            # '0.25_480_240_train_corrected',
+            '0.25_320_train',
         ],
-        augment = train_augment,#
+        augment = train_augment,
     )
     train_loader  = DataLoader(
         train_dataset,
@@ -173,8 +172,11 @@ def run_train():
     )
 
     valid_dataset = HuDataset(
-        image_id  = [make_image_id ('valid-%d'%fold)],
-        image_dir = ['0.25_480_240_train_corrected'],
+        image_id  = [make_image_id('valid-%d' % fold)],
+        image_dir = [
+            # '0.25_480_240_train_corrected'
+            '0.25_320_train',
+        ],
     )
     valid_loader = DataLoader(
         valid_dataset,
@@ -187,12 +189,14 @@ def run_train():
     )
 
 
-    log.write('fold = %s\n'%str(fold))
-    log.write('train_dataset : \n%s\n'%(train_dataset))
-    log.write('valid_dataset : \n%s\n'%(valid_dataset))
+    log.write('fold = %s\n' % str(fold))
+    log.write('train_dataset : \n%s\n' % train_dataset)
+    log.write('valid_dataset : \n%s\n' % valid_dataset)
     log.write('\n')
 
-    ## net ----------------------------------------
+    ##################################################
+    ## net -------------------------------------------
+    ##################################################
     log.write('** net setting **\n')
 
     if is_mixed_precision:
@@ -207,7 +211,7 @@ def run_train():
         start_iteration = f['iteration']
         start_epoch = f['epoch']
         state_dict  = f['state_dict']
-        net.load_state_dict(state_dict,strict=False)  #True
+        net.load_state_dict(state_dict, strict=False)
     else:
         start_iteration = 0
         start_epoch = 0
@@ -216,7 +220,6 @@ def run_train():
 
     log.write('\tinitial_checkpoint = %s\n' % initial_checkpoint)
     log.write('\n')
-
 
     ## optimiser ----------------------------------
     if 0: ##freeze
@@ -243,20 +246,21 @@ def run_train():
     #optimizer = Lookahead(torch.optim.Adam(filter(lambda p: p.requires_grad, net.parameters()),lr=start_lr))
     optimizer = Lookahead(RAdam(filter(lambda p: p.requires_grad, net.parameters()),lr=start_lr), alpha=0.5, k=5)
 
-    num_iteration = 8000*1000
-    iter_log    = 250
-    iter_valid  = 250
-    iter_save   = list(range(0, num_iteration, 500))#1*1000
+    num_iteration = 8 * 1000           # total nb. of batch used to train the net
+    iter_log    = 250                  # show results every iter_log
+    iter_valid  = 250                  # validate every iter_valid
+    iter_save   = list(range(0, num_iteration, 500))
 
-    log.write('optimizer\n  %s\n'%(optimizer))
+    log.write('optimizer\n  %s\n' % optimizer)
     #log.write('schduler\n  %s\n'%(schduler))
     log.write('\n')
 
+    ######################################################################
     ## start training here! ##############################################
-    #array([0.57142857, 0.42857143])
+    ######################################################################
     log.write('** start training here! **\n')
-    log.write('   is_mixed_precision = %s \n'%str(is_mixed_precision))
-    log.write('   batch_size = %d \n'%(batch_size))
+    log.write('   is_mixed_precision = %s \n' % str(is_mixed_precision))
+    log.write('   batch_size = %d \n' % batch_size)
     log.write('   experiment = %s\n' % str(__file__.split('/')[-2:]))
     log.write('                     |-------------- VALID---------|---- TRAIN/BATCH ----------------\n')
     log.write('rate     iter  epoch | dice   loss   tp     tn     | loss           | time           \n')
@@ -264,44 +268,42 @@ def run_train():
               #0.00100   0.50  0.80 | 0.891  0.020  0.000  0.000  | 0.000  0.000   |  0 hr 02 min
 
     def message(mode='print'):
-        if mode==('print'):
+        if mode == 'print':
             asterisk = ' '
             loss = batch_loss
-        if mode==('log'):
+        if mode == 'log':
             asterisk = '*' if iteration in iter_save else ' '
             loss = train_loss
 
         text = \
-            '%0.5f  %5.2f%s %4.2f | '%(rate, iteration/1000, asterisk, epoch,) +\
+            '%0.5f  %5.2f%s %4.2f | ' % (rate, iteration/1000, asterisk, epoch,) +\
             '%4.3f  %4.3f  %4.3f  %4.3f  | ' % (*valid_loss,) +\
-            '%4.3f  %4.3f   | '%(*loss,) +\
+            '%4.3f  %4.3f   | ' % (*loss,) +\
             '%s' % (time_to_str(timer() - start_timer, 'min'))
 
         return text
 
     #----
-    valid_loss = np.zeros(4,np.float32)
-    train_loss = np.zeros(2,np.float32)
+    valid_loss = np.zeros(4, np.float32)
+    train_loss = np.zeros(2, np.float32)
     batch_loss = np.zeros_like(train_loss)
     sum_train_loss = np.zeros_like(train_loss)
     sum_train = 0
     loss = torch.FloatTensor([0]).sum()
-
-
     start_timer = timer()
     iteration = start_iteration
     epoch = start_epoch
     rate = 0
-    while  iteration < num_iteration:
+    while iteration < num_iteration:
 
         for t, batch in enumerate(train_loader):
 
             if (iteration % iter_valid==0):
-                valid_loss = do_valid(net, valid_loader) #
+                valid_loss = do_valid(net, valid_loader)
                 pass
 
             if (iteration % iter_log==0):
-                print('\r',end='',flush=True)
+                print('\r', end='', flush=True)
                 log.write(message(mode='log')+'\n')
 
             if iteration in iter_save:
@@ -312,8 +314,6 @@ def run_train():
                         'epoch': epoch,
                     }, out_dir + '/checkpoint/%08d_model.pth' % (iteration))
                     pass
-
-
 
             # learning rate schduler -------------
             #adjust_learning_rate(optimizer, schduler(iteration))
@@ -347,25 +347,24 @@ def run_train():
                 loss.backward()
                 optimizer.step()
 
-
             # print statistics  --------
             epoch += 1 / len(train_loader)
             iteration += 1
 
 
-            batch_loss = np.array([ loss.item(), 0 ])
+            batch_loss = np.array([loss.item(), 0])
             sum_train_loss += batch_loss
             sum_train += 1
-            if iteration%100 == 0:
-                train_loss = sum_train_loss/(sum_train+1e-12)
+            if iteration % 100 == 0:
+                train_loss = sum_train_loss / (sum_train + 1e-12)
                 sum_train_loss[...] = 0
                 sum_train = 0
 
-            print('\r',end='',flush=True)
-            print(message(mode='print'), end='',flush=True)
+            print('\r', end='', flush=True)
+            print(message(mode='print'), end='', flush=True)
 
             #debug
-            if 0 :
+            if show_valid_images:
             #if iteration%50==1:
                 pass
                 # buggy code ????
@@ -403,13 +402,10 @@ def run_train():
     log.write('\n')
 
 
-
-
+########################################################################
 # main #################################################################
+########################################################################
 if __name__ == '__main__':
-    run_train()
-
-'''
- 
-
-'''
+    run_train(
+        show_valid_images=False
+    )

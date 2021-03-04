@@ -7,7 +7,7 @@ import json
 
 project_repo = '/home/fabien/Kaggle/HuBMAP/HengCherKeng/2020-12-11'
 raw_data_dir = '/home/fabien/Kaggle/HuBMAP/input/'
-data_dir = '/home/fabien/Kaggle/HuBMAP/input/'
+data_dir = project_repo + '/data'
 
 
 def read_mask(mask_file):

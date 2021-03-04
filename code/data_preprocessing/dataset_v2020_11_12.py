@@ -22,25 +22,26 @@ def make_image_id(mode):
         3 : 'c68fe75ea',
         4 : 'afa5e8098',
     }
-    if 'pseudo-all'==mode:
-        test_id = [ test_image_id[i] for i in [0,1,2,3,4] ]
+
+    if mode == 'pseudo-all':
+        test_id = [test_image_id[i] for i in [0, 1, 2, 3, 4]]
         return test_id
 
-    if 'test-all'==mode:
-        test_id = [ test_image_id[i] for i in [0,1,2,3,4] ] # list(test_image_id.values()) #
+    if mode == 'test-all':
+        test_id = [test_image_id[i] for i in [0, 1, 2, 3, 4]]
         return test_id
 
-
-    if 'train-all'==mode:
-        train_id = [ train_image_id[i] for i in [0,1,2,3,4,5,6,7] ] # list(test_image_id.values()) #
+    if mode == 'train-all':
+        train_id = [train_image_id[i] for i in [0, 1, 2, 3, 4, 5, 6, 7]]
         return train_id
 
     if 'valid' in mode or 'train' in mode:
         fold = int(mode[-1])
-        valid = [fold,]
-        train = list({0,1,2,3,4,5,6,7}-{fold,})
-        valid_id = [ train_image_id[i] for i in valid ]
-        train_id = [ train_image_id[i] for i in train ]
+        valid = [fold]
+        train = [i for i in range(8) if i != fold]
+        # train = list({0, 1, 2, 3, 4, 5, 6, 7} - {fold, })
+        valid_id = [train_image_id[i] for i in valid]
+        train_id = [train_image_id[i] for i in train]
 
         if 'valid' in mode: return valid_id
         if 'train' in mode: return train_id
@@ -56,8 +57,8 @@ class HuDataset(Dataset):
         tile_id = []
         for i in range(len(image_dir)):
             for id in image_id[i]:
-                df = pd.read_csv(data_dir + '/etc/tile/%s/%s.csv'% (self.image_dir[i],id) )
-                tile_id += ('%s/%s/'%(self.image_dir[i],id) + df.tile_id).tolist()
+                df = pd.read_csv(data_dir + '/tile/%s/%s.csv' % (self.image_dir[i], id))
+                tile_id += ('%s/%s/' % (self.image_dir[i], id) + df.tile_id).tolist()
 
         self.tile_id = tile_id
         self.len =len(self.tile_id)
@@ -77,8 +78,8 @@ class HuDataset(Dataset):
 
     def __getitem__(self, index):
         id = self.tile_id[index]
-        image = cv2.imread(data_dir + '/etc/tile/%s.png'%(id), cv2.IMREAD_COLOR)
-        mask  = cv2.imread(data_dir + '/etc/tile/%s.mask.png'%(id), cv2.IMREAD_GRAYSCALE)
+        image = cv2.imread(data_dir + '/tile/%s.png'%(id), cv2.IMREAD_COLOR)
+        mask  = cv2.imread(data_dir + '/tile/%s.mask.png'%(id), cv2.IMREAD_GRAYSCALE)
         #print(data_dir + '/tile/%s/%s.png'%(self.image_dir,id))
 
         image = image.astype(np.float32) / 255
