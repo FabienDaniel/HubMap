@@ -1,4 +1,5 @@
 import os
+import sys
 
 import torch
 from torch.nn.parallel.data_parallel import data_parallel
@@ -15,6 +16,7 @@ from timeit import default_timer as timer
 os.environ['CUDA_VISIBLE_DEVICES']='0'
 
 from PIL import Image
+import git
 import PIL
 import numpy as np
 import cv2
@@ -53,14 +55,12 @@ def mask_to_csv(image_id, submit_dir):
     return df
 
 
-def run_submit(sha, server):
+def submit(sha, server, model_checkpoint):
 
-    fold = 1
+    fold = 2
 
     out_dir = project_repo + '/result/Baseline/fold%d' % fold
-    initial_checkpoint = out_dir + f'/checkpoint_{sha}/00007500_model.pth'
-    # server = 'local'
-    # server = 'kaggle'
+    initial_checkpoint = out_dir + f'/checkpoint_{sha}/{model_checkpoint}'
 
     print(f"submit with server={server}")
 
@@ -271,14 +271,41 @@ def run_make_csv():
     print(df)
 
 
+########################################################################
 # main #################################################################
+########################################################################
 if __name__ == '__main__':
 
-    import git
+    import argparse
+
+    # Initialize parser
+    parser = argparse.ArgumentParser()
+
+    # Adding optional argument
+    parser.add_argument("-i", "--Iterations", help="number of iterations")
+    parser.add_argument("-s", "--Server", help="run mode: server or kaggle")
+
+    args = parser.parse_args()
+    if args.Iterations:
+        print("Model taken at iterations: % s" % args.Iterations)
+
+        model_checkpoint = f'{int(args.Iterations):08}_model.pth'
+
+        print(f' using model: {model_checkpoint}')
+
+    else:
+        print("iterations missing")
+        sys.exit()
+
+    if args.Server in ['kaggle', 'local']:
+        print("Server: % s" % args.Server)
+    else:
+        print("Server missing")
+        sys.exit()
+
     repo = git.Repo(search_parent_directories=True)
     model_sha = repo.head.object.hexsha[:9]
     print(f"current commit: {model_sha}")
-    # print(repo.index.diff("HEAD"))
 
     changedFiles = [item.a_path for item in repo.index.diff(None) if item.a_path.endswith(".py")]
     if len(changedFiles) > 0:
@@ -287,6 +314,8 @@ if __name__ == '__main__':
             print(f" * {_file}")
 
     else:
-        run_submit(model_sha,
-                   server='kaggle')
+        submit(model_sha,
+               server=args.Server,
+               model_checkpoint=model_checkpoint,
+               )
 
