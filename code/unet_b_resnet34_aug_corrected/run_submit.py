@@ -1,13 +1,30 @@
 import os
+
+import torch
+from torch.nn.parallel.data_parallel import data_parallel
+
+from code.data_preprocessing.dataset import read_tiff, to_tile
+from code.data_preprocessing.dataset_v2020_11_12 import make_image_id, draw_strcuture, read_json_as_df, read_mask, \
+    to_mask, draw_contour_overlay, image_show_norm
+from code.hubmap_v2 import data_dir, rle_encode, project_repo, raw_data_dir
+from code.lib.include import IDENTIFIER
+from code.lib.utility.file import Logger, time_to_str
+from code.unet_b_resnet34_aug_corrected.model import Net, np_binary_cross_entropy_loss, np_dice_score, np_accuracy
+from timeit import default_timer as timer
+
 os.environ['CUDA_VISIBLE_DEVICES']='0'
-#os.environ['OPENCV_IO_MAX_IMAGE_PIXELS'] = pow(2,40).__str__()
-#import cv2
+
 from PIL import Image
+import PIL
+import numpy as np
+import cv2
+import pandas as pd
+
 Image.MAX_IMAGE_PIXELS = None
 
-from common  import *
-from dataset import *
-from model   import *
+# from code.common  import *
+# from dataset import *
+# from model   import *
 
 import torch.cuda.amp as amp
 is_mixed_precision = False  # True #True #
@@ -17,7 +34,7 @@ def mask_to_csv(image_id, submit_dir):
 
     predicted = []
     for id in image_id:
-        image_file = data_dir + '/test/%s.tiff' % id
+        image_file = raw_data_dir + '/test/%s.tiff' % id
         image = read_tiff(image_file)
 
         height, width = image.shape[:2]
@@ -36,31 +53,28 @@ def mask_to_csv(image_id, submit_dir):
     return df
 
 
-def run_submit():
+def run_submit(sha, server):
 
-    fold = 2
-    out_dir = \
-        '/root/share1/kaggle/2020/hubmap/result/en-resnet34-256-aug-corrected/fold%d'%fold
-    #out_dir = '/root/share1/kaggle/2020/hubmap/result/resnet34/fold-all'
-    initial_checkpoint = \
-        out_dir + '/checkpoint/00008500_model.pth' #
-        #out_dir + '/checkpoint/00011500_model.pth' #
-        #out_dir + '/checkpoint/00008500_model.pth' #
+    fold = 1
 
-    #server = 'local' # local or kaggle
-    server = 'kaggle'
+    out_dir = project_repo + '/result/Baseline/fold%d' % fold
+    initial_checkpoint = out_dir + f'/checkpoint_{sha}/00007500_model.pth'
+    # server = 'local'
+    # server = 'kaggle'
+
+    print(f"submit with server={server}")
 
     #---
-    submit_dir = out_dir + '/valid/%s-%s-mean'%(server, initial_checkpoint[-18:-4])
-    os.makedirs(submit_dir,exist_ok=True)
+    submit_dir = out_dir + f'/predictions_{sha}/%s-%s-mean' % (server, initial_checkpoint[-18:-4])
+    os.makedirs(submit_dir, exist_ok=True)
 
     log = Logger()
-    log.open(out_dir+'/log.submit.txt',mode='a')
+    log.open(out_dir + f'/log.submit_{sha}.txt', mode='a')
     log.write('\n--- [START %s] %s\n\n' % (IDENTIFIER, '-' * 64))
 
     net = Net().cuda()
     state_dict = torch.load(initial_checkpoint, map_location=lambda storage, loc: storage)['state_dict']
-    net.load_state_dict(state_dict,strict=True)  #True
+    net.load_state_dict(state_dict, strict=True)
     net = net.eval()
 
     #---
@@ -68,7 +82,7 @@ def run_submit():
         #valid_image_id = make_image_id('valid-%d' % fold)
         valid_image_id = make_image_id('train-all')
     if server == 'kaggle':
-        #valid_image_id = ['c68fe75ea','afa5e8098'] #make_image_id('test-all')
+        #valid_image_id = ['c68fe75ea','afa5e8098']
         valid_image_id = make_image_id('test-all')
 
 
@@ -77,33 +91,33 @@ def run_submit():
     tile_scale = 0.25
     tile_min_score = 0.25
 
-    log.write('tile_size = %d \n'%tile_size)
-    log.write('tile_average_step = %d \n'%tile_average_step)
-    log.write('tile_scale = %f \n'%tile_scale)
-    log.write('tile_min_score = %f \n'%tile_min_score)
+    log.write('tile_size = %d \n' % tile_size)
+    log.write('tile_average_step = %d \n' % tile_average_step)
+    log.write('tile_scale = %f \n' % tile_scale)
+    log.write('tile_min_score = %f \n' % tile_min_score)
     log.write('\n')
 
 
     start_timer = timer()
     for id in valid_image_id:
         if server == 'local':
-            image_file = data_dir + '/train/%s.tiff' % id
+            image_file = raw_data_dir + '/train/%s.tiff' % id
             image = read_tiff(image_file)
             height, width = image.shape[:2]
 
-            json_file  = data_dir + '/train/%s-anatomical-structure.json' % id
+            json_file  = raw_data_dir + '/train/%s-anatomical-structure.json' % id
             structure = draw_strcuture(read_json_as_df(json_file), height, width, structure=['Cortex'])
 
             try:
-                mask_file = data_dir + '/train/%s.corrected_shift_mask.png' % id
+                mask_file = raw_data_dir + '/train/%s.corrected_shift_mask.png' % id
                 mask  = read_mask(mask_file)
             except:
-                mask_file  = data_dir + '/train/%s.corrected_mask.png' % id
+                mask_file  = raw_data_dir + '/train/%s.mask.png' % id
                 mask  = read_mask(mask_file)
 
         if server == 'kaggle':
-            image_file = data_dir + '/test/%s.tiff' % id
-            json_file  = data_dir + '/test/%s-anatomical-structure.json' % id
+            image_file = raw_data_dir + '/test/%s.tiff' % id
+            json_file  = raw_data_dir + '/test/%s-anatomical-structure.json' % id
 
             image = read_tiff(image_file)
             height, width = image.shape[:2]
@@ -113,7 +127,9 @@ def run_submit():
 
 
         #--- predict here!  ---
-        tile = to_tile(image, mask, structure, tile_scale, tile_size, tile_average_step, tile_min_score)
+        # tile = to_tile(image, mask, structure, tile_scale, tile_size, tile_average_step, tile_min_score)
+        tile = to_tile(image, mask, tile_scale, tile_size, tile_average_step, tile_min_score)
+
 
         tile_image = tile['tile_image']
         tile_image = np.stack(tile_image)[..., ::-1]
@@ -122,8 +138,10 @@ def run_submit():
 
         tile_probability = []
         batch = np.array_split(tile_image, len(tile_image)//4)
-        for t,m in enumerate(batch):
-            print('\r %s  %d / %d   %s'%(id, t, len(batch), time_to_str(timer() - start_timer, 'sec')), end='',flush=True)
+        for t, m in enumerate(batch):
+            print('\r %s  %d / %d   %s' %
+                  (id, t, len(batch), time_to_str(timer() - start_timer, 'sec')),
+                  end='', flush=True)
             m = torch.from_numpy(m).cuda()
 
             p = []
@@ -143,8 +161,9 @@ def run_submit():
             p = torch.stack(p).mean(0)
             tile_probability.append(p.data.cpu().numpy())
 
-        print('\r' , end='',flush=True)
-        log.write('%s  %d / %d   %s\n'%(id, t, len(batch), time_to_str(timer() - start_timer, 'sec')))
+        print('\r' , end='', flush=True)
+        log.write('%s  %d / %d   %s\n' %
+                  (id, t, len(batch), time_to_str(timer() - start_timer, 'sec')))
 
         tile_probability = np.concatenate(tile_probability).squeeze(1)
         height, width = tile['image_small'].shape[:2]
@@ -155,7 +174,7 @@ def run_submit():
         #--- show results ---
         if server == 'local':
             truth = tile['mask_small'].astype(np.float32)/255
-        if server == 'kaggle':
+        elif server == 'kaggle':
             truth = np.zeros((height, width), np.float32)
 
         overlay = np.dstack([
@@ -164,10 +183,10 @@ def run_submit():
             truth, #red
         ])
         image_small = tile['image_small'].astype(np.float32)/255
-        predict = (probability>0.5).astype(np.float32)
+        predict = (probability > 0.5).astype(np.float32)
         overlay1 = 1-(1-image_small)*(1-overlay)
         overlay2 = image_small.copy()
-        overlay2 = draw_contour_overlay(overlay2, tile['structure_small'], color=(1, 1, 1), thickness=3)
+        # overlay2 = draw_contour_overlay(overlay2, tile['structure_small'], color=(1, 1, 1), thickness=3)
         overlay2 = draw_contour_overlay(overlay2, truth, color=(0, 0, 1), thickness=8)
         overlay2 = draw_contour_overlay(overlay2, probability, color=(0, 1, 0), thickness=3)
 
@@ -182,17 +201,16 @@ def run_submit():
             cv2.waitKey(1)
 
         if 1:
-            cv2.imwrite(submit_dir+'/%s.image_small.png'%id, (image_small*255).astype(np.uint8))
-            cv2.imwrite(submit_dir+'/%s.probability.png'%id, (probability*255).astype(np.uint8))
-            cv2.imwrite(submit_dir+'/%s.predict.png'%id, (predict*255).astype(np.uint8))
-            cv2.imwrite(submit_dir+'/%s.overlay.png'%id, (overlay*255).astype(np.uint8))
-            cv2.imwrite(submit_dir+'/%s.overlay1.png'%id, (overlay1*255).astype(np.uint8))
-            cv2.imwrite(submit_dir+'/%s.overlay2.png'%id, (overlay2*255).astype(np.uint8))
+            cv2.imwrite(submit_dir + '/%s.image_small.png' % id, (image_small*255).astype(np.uint8))
+            cv2.imwrite(submit_dir + '/%s.probability.png' % id, (probability*255).astype(np.uint8))
+            cv2.imwrite(submit_dir + '/%s.predict.png' % id, (predict*255).astype(np.uint8))
+            cv2.imwrite(submit_dir + '/%s.overlay.png' % id, (overlay*255).astype(np.uint8))
+            cv2.imwrite(submit_dir + '/%s.overlay1.png' % id, (overlay1*255).astype(np.uint8))
+            cv2.imwrite(submit_dir + '/%s.overlay2.png' % id, (overlay2*255).astype(np.uint8))
 
         #---
 
         if server == 'local':
-
             loss = np_binary_cross_entropy_loss(probability, truth)
             dice = np_dice_score(probability, truth)
             tp, tn = np_accuracy(probability, truth)
@@ -206,7 +224,7 @@ def run_submit():
 
     #-----
     if server == 'kaggle':
-        csv_file = submit_dir +'/submission-%s-%s.csv'%(out_dir.split('/')[-1], initial_checkpoint[-18:-4])
+        csv_file = submit_dir + f'/submission_{sha}-%s-%s.csv' % (out_dir.split('/')[-1], initial_checkpoint[-18:-4])
         df = mask_to_csv(valid_image_id, submit_dir)
         df.to_csv(csv_file, index=False)
         print(df)
@@ -219,13 +237,8 @@ def run_submit():
 
 def run_make_csv():
 
-    submit_dir = \
-        '/root/share1/kaggle/2020/hubmap/result/resnet34-256/fold2/valid/kaggle-00004000_model-fix'
-        #'/root/share1/kaggle/2020/hubmap/result/en-resnet34-256-2-aug3/fold2/valid/kaggle-00006500_model-fix1'
-
-    csv_file = \
-        submit_dir+'/kaggle-00004000_model-top1.csv'
-        #submit_dir+'/00006500_model-fix1.csv'
+    submit_dir = project_repo + '/result/Baseline/fold1'
+    csv_file = submit_dir + '/kaggle-00004000_model-top1.csv'
 
     #-----
     image_id = make_image_id('test-all')
@@ -233,20 +246,19 @@ def run_make_csv():
 
     for id in image_id:
         print(id)
-        image_file = data_dir + '/test/%s.tiff' % id
+        image_file = raw_data_dir + '/test/%s.tiff' % id
         image = read_tiff(image_file)
         height, width = image.shape[:2]
         try:
-            predict_file = submit_dir+'/%s.top.png'%id
-            #predict_file = submit_dir+'/%s.fix.png'%id
+            predict_file = submit_dir + '/%s.top.png' % id
             predict = np.array(PIL.Image.open(predict_file))
         except:
-            predict_file = submit_dir+'/%s.predict.png'%id
+            predict_file = submit_dir + '/%s.predict.png' % id
             predict = np.array(PIL.Image.open(predict_file))
 
 
         predict = cv2.resize(predict, dsize=(width,height), interpolation=cv2.INTER_LINEAR)
-        predict = (predict>128).astype(np.uint8)*255
+        predict = (predict > 128).astype(np.uint8)*255
 
         p = rle_encode(predict)
         predicted.append(p)
@@ -261,10 +273,20 @@ def run_make_csv():
 
 # main #################################################################
 if __name__ == '__main__':
-    #run_submit()
-    run_make_csv()
 
-'''
- 
+    import git
+    repo = git.Repo(search_parent_directories=True)
+    model_sha = repo.head.object.hexsha[:9]
+    print(f"current commit: {model_sha}")
+    # print(repo.index.diff("HEAD"))
 
-'''
+    changedFiles = [item.a_path for item in repo.index.diff(None) if item.a_path.endswith(".py")]
+    if len(changedFiles) > 0:
+        print("ABORT submission -- There are unstaged files:")
+        for _file in changedFiles:
+            print(f" * {_file}")
+
+    else:
+        run_submit(model_sha,
+                   server='kaggle')
+

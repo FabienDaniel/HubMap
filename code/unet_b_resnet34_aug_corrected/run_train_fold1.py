@@ -33,10 +33,10 @@ class AmpNet(Net):
 
 is_mixed_precision = True
 
-
 #################################################################################################
 
 image_size = 256
+
 
 def train_augment(record):
     image = record['image']
