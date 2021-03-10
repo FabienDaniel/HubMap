@@ -9,10 +9,9 @@ def read_tiff(image_file):
         image = image.transpose(1, 2, 0)
     elif image.shape[2] == 3 and image.ndim == 5 :
         image = np.transpose(image.squeeze(), (1, 2, 0))
-
     image = np.ascontiguousarray(image)
-
     return image
+
 
 #----------------------------------
 tile_scale = 0.25

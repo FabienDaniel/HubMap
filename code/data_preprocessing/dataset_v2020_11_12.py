@@ -6,21 +6,21 @@ from code.hubmap_v2 import *
 
 def make_image_id(mode):
     train_image_id = {
-        0 : '2f6ecfcdf',
-        1 : 'aaa6a05cc',
-        2 : 'cb2d976f4',
-        3 : '0486052bb',
-        4 : 'e79de561c',
-        5 : '095bf7a1f',
-        6 : '54f2eec69',
-        7 : '1e2425f28',
+        0 : '0486052bb',
+        1 : '095bf7a1f',
+        2 : '1e2425f28',
+        3 : '2f6ecfcdf',
+        4 : '54f2eec69',
+        5 : 'aaa6a05cc',
+        6 : 'cb2d976f4',
+        7 : 'e79de561c',
     }
     test_image_id = {
-        0 : 'b9a3865fc',
-        1 : 'b2dc8411c',
-        2 : '26dc41664',
-        3 : 'c68fe75ea',
-        4 : 'afa5e8098',
+        0 : '2ec3f1bb9',
+        1 : '3589adb90',
+        2 : 'd488c759a',
+        3 : 'aa05346ff',
+        4 : '57512b7f1',
     }
 
     if mode == 'pseudo-all':
@@ -319,7 +319,7 @@ def run_check_augment():
 
 
     dataset = HuDataset(
-        image_id  = [make_image_id ('train-0')],
+        image_id  = [make_image_id('train-0')],
         image_dir = ['0.25_480_240_train'],
     ) #'0.25_320_192_train'
     print(dataset)
