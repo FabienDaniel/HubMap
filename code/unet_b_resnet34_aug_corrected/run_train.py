@@ -1,3 +1,4 @@
+import argparse
 import os
 
 import git
@@ -410,6 +411,18 @@ def run_train(show_valid_images=False,
 ########################################################################
 
 if __name__ == '__main__':
+
+    ########################
+    # define run arguments
+    ########################
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-f", "--fold", help="fold")
+    args = parser.parse_args()
+    if not args.fold:
+        print("fold missing")
+        sys.exit()
+
+    ##########################################
     repo = git.Repo(search_parent_directories=True)
     model_sha = repo.head.object.hexsha[:9]
     print(f"current commit: {model_sha}")
@@ -423,7 +436,7 @@ if __name__ == '__main__':
         run_train(
             show_valid_images = False,
             sha               = model_sha,
-            fold              = 2,
+            fold              = int(args.fold),
             start_lr          = 0.001,
             batch_size        = 32,
             num_iteration     = 8000,

@@ -1,3 +1,4 @@
+import argparse
 import os
 import sys
 
@@ -55,9 +56,7 @@ def mask_to_csv(image_id, submit_dir):
     return df
 
 
-def submit(sha, server, model_checkpoint):
-
-    fold = 2
+def submit(sha, server, model_checkpoint, fold):
 
     out_dir = project_repo + '/result/Baseline/fold%d' % fold
     initial_checkpoint = out_dir + f'/checkpoint_{sha}/{model_checkpoint}'
@@ -276,23 +275,24 @@ def run_make_csv():
 ########################################################################
 if __name__ == '__main__':
 
-    import argparse
-
     # Initialize parser
     parser = argparse.ArgumentParser()
 
     # Adding optional argument
     parser.add_argument("-i", "--Iterations", help="number of iterations")
     parser.add_argument("-s", "--Server", help="run mode: server or kaggle")
+    parser.add_argument("-f", "--fold", help="fold")
 
     args = parser.parse_args()
+
+    if not args.fold:
+        print("fold missing")
+        sys.exit()
+
     if args.Iterations:
         print("Model taken at iterations: % s" % args.Iterations)
-
         model_checkpoint = f'{int(args.Iterations):08}_model.pth'
-
         print(f' using model: {model_checkpoint}')
-
     else:
         print("iterations missing")
         sys.exit()
@@ -317,5 +317,6 @@ if __name__ == '__main__':
         submit(model_sha,
                server=args.Server,
                model_checkpoint=model_checkpoint,
+               fold=int(args.fold)
                )
 
