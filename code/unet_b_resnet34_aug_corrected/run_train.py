@@ -123,12 +123,12 @@ def do_valid(net, valid_loader):
 
 def run_train(show_valid_images=False,
               sha='',
-              fold=1,
+              fold=None,
               *args,
               **kwargs
               ):
 
-    out_dir = 'result/Baseline/fold%d' % fold
+    out_dir = f"result/Baseline/fold{'_'.join(map(str, fold))}"
     initial_checkpoint = None
 
     start_lr = kwargs.get('start_lr', 0.001)
@@ -139,9 +139,7 @@ def run_train(show_valid_images=False,
     ##################################################
     for f in [
         f'checkpoint_{sha}',
-        # 'train',
         f'predictions_{sha}',
-        # 'backup'
     ]:
         os.makedirs(out_dir + '/' + f, exist_ok=True)
 
@@ -160,7 +158,7 @@ def run_train(show_valid_images=False,
 
     train_dataset = HuDataset(
         image_id=[
-            make_image_id('train-%d' % fold),
+            make_image_id('train', fold),
         ],
         image_dir=[
             '0.25_320_train',
@@ -178,7 +176,7 @@ def run_train(show_valid_images=False,
     )
 
     valid_dataset = HuDataset(
-        image_id=[make_image_id('valid-%d' % fold)],
+        image_id=[make_image_id('valid', fold)],
         image_dir=[
             '0.25_320_train',
         ],
@@ -193,7 +191,7 @@ def run_train(show_valid_images=False,
         collate_fn=null_collate
     )
 
-    log.write('fold = %s\n' % str(fold))
+    log.write('fold = %s\n' % ' '.join(map(str, fold)))
     log.write('train_dataset : \n%s\n' % train_dataset)
     log.write('valid_dataset : \n%s\n' % valid_dataset)
     log.write('\n')
@@ -420,6 +418,13 @@ if __name__ == '__main__':
     if not args.fold:
         print("fold missing")
         sys.exit()
+    elif isinstance(args.fold, int):
+        fold = [int(args.fold)]
+    elif isinstance(args.fold, str):
+        fold = [int(c) for c in args.fold.split()]
+    else:
+        print("unsupported format for fold")
+        sys.exit()
 
     ##########################################
     repo = git.Repo(search_parent_directories=True)
@@ -435,7 +440,7 @@ if __name__ == '__main__':
         run_train(
             show_valid_images = False,
             sha               = model_sha,
-            fold              = int(args.fold),
+            fold              = fold,
             start_lr          = 0.001,
             batch_size        = 32,
             num_iteration     = 8000,

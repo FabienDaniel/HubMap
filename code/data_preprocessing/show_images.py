@@ -29,6 +29,7 @@ if __name__ == '__main__':
     # Adding optional argument
     parser.add_argument("-f", "--fold", help="fold number")
     parser.add_argument("-s", "--server", help="server", default="kaggle")
+    parser.add_argument("-o", "--overlay", help="overlay", default="overlay2")
 
     args = parser.parse_args()
 
@@ -67,7 +68,8 @@ if __name__ == '__main__':
     image_options = []
     i = 0
     for _file in os.listdir(pathdir):
-        if 'overlay2' not in _file: continue
+        # if 'overlay2' not in _file: continue
+        if args.overlay not in _file: continue
         print(f"image n°{i}:", _file)
         image_options.append(_file)
         i += 1
@@ -92,6 +94,7 @@ if __name__ == '__main__':
         '26dc41664': 0.07,
         'c68fe75ea': 0.07,
         'afa5e8098': 0.07,
+        'aaa6a05cc': 0.2,
     }
 
     display_images(

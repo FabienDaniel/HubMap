@@ -4,7 +4,7 @@ from code.hubmap_v2 import *
 
 #############################################################################
 
-def make_image_id(mode):
+def make_image_id(mode='train', valid_ids=None):
     train_image_id = {
         0 : '0486052bb',
         1 : '095bf7a1f',
@@ -30,25 +30,18 @@ def make_image_id(mode):
         4 : '57512b7f1',
     }
 
-    # if mode == 'pseudo-all':
-    #     test_id = [test_image_id[i] for i in [0, 1, 2, 3, 4]]
-    #     return test_id
-
     if mode == 'test-all':
         return list(test_image_id.values())
 
-    if mode == 'train-all':
+    elif mode == 'train-all':
         return list(train_image_id.values())
 
-    if 'valid' in mode or 'train' in mode:
-        fold = int(mode[-1])
-        valid = [fold]
-        train = [i for i in train_image_id.keys() if i != fold]
-        valid_id = [train_image_id[i] for i in valid]
-        train_id = [train_image_id[i] for i in train]
+    elif mode == 'valid':
+        return [train_image_id[i] for i in valid_ids]
 
-        if 'valid' in mode: return valid_id
-        if 'train' in mode: return train_id
+    elif mode == 'train':
+        train_ids = [i for i in train_image_id.keys() if i not in valid_ids]
+        return [train_image_id[i] for i in train_ids]
 
 
 class HuDataset(Dataset):

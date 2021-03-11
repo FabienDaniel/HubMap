@@ -14,7 +14,7 @@ from code.lib.utility.file import Logger, time_to_str
 from code.unet_b_resnet34_aug_corrected.model import Net, np_binary_cross_entropy_loss, np_dice_score, np_accuracy
 from timeit import default_timer as timer
 
-os.environ['CUDA_VISIBLE_DEVICES']='0'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 from PIL import Image
 import git
@@ -25,12 +25,7 @@ import pandas as pd
 
 Image.MAX_IMAGE_PIXELS = None
 
-# from code.common  import *
-# from dataset import *
-# from model   import *
-
-import torch.cuda.amp as amp
-is_mixed_precision = False  # True #True #
+is_mixed_precision = False
 
 
 def mask_to_csv(image_id, submit_dir):
@@ -42,7 +37,6 @@ def mask_to_csv(image_id, submit_dir):
 
         height, width = image.shape[:2]
         predict_file = submit_dir + '/%s.predict.png' % id
-        # predict = cv2.imread(predict_file, cv2.IMREAD_GRAYSCALE)
         predict = np.array(PIL.Image.open(predict_file))
         predict = cv2.resize(predict, dsize=(width, height), interpolation=cv2.INTER_LINEAR)
         predict = (predict > 128).astype(np.uint8) * 255
@@ -58,7 +52,7 @@ def mask_to_csv(image_id, submit_dir):
 
 def submit(sha, server, model_checkpoint, fold):
 
-    out_dir = project_repo + '/result/Baseline/fold%d' % fold
+    out_dir = project_repo + f"result/Baseline/fold{'_'.join(map(str, fold))}"
     initial_checkpoint = out_dir + f'/checkpoint_{sha}/{model_checkpoint}'
 
     print(f"submit with server={server}")
@@ -78,10 +72,8 @@ def submit(sha, server, model_checkpoint, fold):
 
     #---
     if server == 'local':
-        #valid_image_id = make_image_id('valid-%d' % fold)
         valid_image_id = make_image_id('train-all')
     if server == 'kaggle':
-        #valid_image_id = ['c68fe75ea','afa5e8098']
         valid_image_id = make_image_id('test-all')
 
 
@@ -132,7 +124,7 @@ def submit(sha, server, model_checkpoint, fold):
 
         tile_image = tile['tile_image']
         tile_image = np.stack(tile_image)[..., ::-1]
-        tile_image = np.ascontiguousarray(tile_image.transpose(0,3,1,2))
+        tile_image = np.ascontiguousarray(tile_image.transpose(0, 3, 1, 2))
         tile_image = tile_image.astype(np.float32)/255
 
         tile_probability = []
@@ -213,11 +205,11 @@ def submit(sha, server, model_checkpoint, fold):
             loss = np_binary_cross_entropy_loss(probability, truth)
             dice = np_dice_score(probability, truth)
             tp, tn = np_accuracy(probability, truth)
-            log.write('submit_dir = %s \n'%submit_dir)
-            log.write('initial_checkpoint = %s \n'%initial_checkpoint)
-            log.write('loss   = %0.8f \n'%loss)
-            log.write('dice   = %0.8f \n'%dice)
-            log.write('tp, tn = %0.8f, %0.8f \n'%(tp, tn))
+            log.write('submit_dir = %s \n' % submit_dir)
+            log.write('initial_checkpoint = %s \n' % initial_checkpoint)
+            log.write('loss   = %0.8f \n' % loss)
+            log.write('dice   = %0.8f \n' % dice)
+            log.write('tp, tn = %0.8f, %0.8f \n' % (tp, tn))
             log.write('\n')
             #cv2.waitKey(0)
 
@@ -256,7 +248,7 @@ def run_make_csv():
             predict = np.array(PIL.Image.open(predict_file))
 
 
-        predict = cv2.resize(predict, dsize=(width,height), interpolation=cv2.INTER_LINEAR)
+        predict = cv2.resize(predict, dsize=(width, height), interpolation=cv2.INTER_LINEAR)
         predict = (predict > 128).astype(np.uint8)*255
 
         p = rle_encode(predict)
@@ -288,6 +280,13 @@ if __name__ == '__main__':
     if not args.fold:
         print("fold missing")
         sys.exit()
+    elif isinstance(args.fold, int):
+        fold = [int(args.fold)]
+    elif isinstance(args.fold, str):
+        fold = [int(c) for c in args.fold.split()]
+    else:
+        print("unsupported format for fold")
+        sys.exit()
 
     if args.Iterations:
         print("Model taken at iterations: % s" % args.Iterations)
@@ -317,6 +316,6 @@ if __name__ == '__main__':
         submit(model_sha,
                server=args.Server,
                model_checkpoint=model_checkpoint,
-               fold=int(args.fold)
+               fold=fold
                )
 
