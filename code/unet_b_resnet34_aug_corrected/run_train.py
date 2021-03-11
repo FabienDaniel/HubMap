@@ -163,7 +163,6 @@ def run_train(show_valid_images=False,
             make_image_id('train-%d' % fold),
         ],
         image_dir=[
-            # '0.25_480_240_train_corrected',
             '0.25_320_train',
         ],
         augment=train_augment,
@@ -181,7 +180,6 @@ def run_train(show_valid_images=False,
     valid_dataset = HuDataset(
         image_id=[make_image_id('valid-%d' % fold)],
         image_dir=[
-            # '0.25_480_240_train_corrected'
             '0.25_320_train',
         ],
     )
@@ -251,9 +249,10 @@ def run_train(show_valid_images=False,
     # optimizer = Lookahead(torch.optim.Adam(filter(lambda p: p.requires_grad, net.parameters()),lr=start_lr))
     optimizer = Lookahead(RAdam(filter(lambda p: p.requires_grad, net.parameters()), lr=start_lr), alpha=0.5, k=5)
 
-    num_iteration = kwargs.get('num_iteration', 5000)  # total nb. of batch used to train the net
-    iter_log = kwargs.get('iter_log', 250)             # show results every iter_log
-    iter_valid = iter_log                              # validate every iter_valid
+    num_iteration = kwargs.get('num_iteration', 5000)   # total nb. of batch used to train the net
+    iter_log = kwargs.get('iter_log', 250)              # show results every iter_log
+    first_iter_save = kwargs.get('first_iter_save', 0)  # first checkpoint kept
+    iter_valid = iter_log                               # validate every iter_valid
     iter_save = list(range(0, num_iteration, iter_log))
 
     log.write('optimizer\n  %s\n' % optimizer)
@@ -312,7 +311,7 @@ def run_train(show_valid_images=False,
                 print('\r', end='', flush=True)
                 log.write(message(mode='log') + '\n')
 
-            if iteration in iter_save:
+            if iteration in iter_save and iteration > first_iter_save:
                 if iteration != start_iteration:
                     torch.save({
                         'state_dict': net.state_dict(),
@@ -441,5 +440,6 @@ if __name__ == '__main__':
             batch_size        = 32,
             num_iteration     = 8000,
             iter_log          = 250,
-            iter_save         = 500
+            iter_save         = 500,
+            first_iter_save   = 2500,
         )

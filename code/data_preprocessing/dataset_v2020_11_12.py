@@ -9,11 +9,18 @@ def make_image_id(mode):
         0 : '0486052bb',
         1 : '095bf7a1f',
         2 : '1e2425f28',
-        3 : '2f6ecfcdf',
-        4 : '54f2eec69',
-        5 : 'aaa6a05cc',
-        6 : 'cb2d976f4',
-        7 : 'e79de561c',
+        3 : '26dc41664',
+        4 : '2f6ecfcdf',
+        5 : '4ef6695ce',
+        6 : '54f2eec69',
+        7 : '8242609fa',
+        8 : 'aaa6a05cc',
+        9 : 'afa5e8098',
+        10: 'b2dc8411c',
+        11: 'b9a3865fc',
+        12: 'c68fe75ea',
+        13: 'cb2d976f4',
+        14: 'e79de561c',
     }
     test_image_id = {
         0 : '2ec3f1bb9',
@@ -23,23 +30,20 @@ def make_image_id(mode):
         4 : '57512b7f1',
     }
 
-    if mode == 'pseudo-all':
-        test_id = [test_image_id[i] for i in [0, 1, 2, 3, 4]]
-        return test_id
+    # if mode == 'pseudo-all':
+    #     test_id = [test_image_id[i] for i in [0, 1, 2, 3, 4]]
+    #     return test_id
 
     if mode == 'test-all':
-        test_id = [test_image_id[i] for i in [0, 1, 2, 3, 4]]
-        return test_id
+        return list(test_image_id.values())
 
     if mode == 'train-all':
-        train_id = [train_image_id[i] for i in [0, 1, 2, 3, 4, 5, 6, 7]]
-        return train_id
+        return list(train_image_id.values())
 
     if 'valid' in mode or 'train' in mode:
         fold = int(mode[-1])
         valid = [fold]
-        train = [i for i in range(8) if i != fold]
-        # train = list({0, 1, 2, 3, 4, 5, 6, 7} - {fold, })
+        train = [i for i in train_image_id.keys() if i != fold]
         valid_id = [train_image_id[i] for i in valid]
         train_id = [train_image_id[i] for i in train]
 
@@ -48,7 +52,6 @@ def make_image_id(mode):
 
 
 class HuDataset(Dataset):
-    #/0.25_320_192_train
     def __init__(self, image_id, image_dir, augment=None):
         self.augment = augment
         self.image_id = image_id
