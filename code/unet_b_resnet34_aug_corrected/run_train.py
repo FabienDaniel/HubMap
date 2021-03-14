@@ -414,6 +414,10 @@ if __name__ == '__main__':
     ########################
     parser = argparse.ArgumentParser()
     parser.add_argument("-f", "--fold", help="fold")
+    parser.add_argument("-i", "--iterations", help="max iterations", default=8000)
+    #----------------
+    # Fold
+    # ----------------
     args = parser.parse_args()
     if not args.fold:
         print("fold missing")
@@ -447,4 +451,5 @@ if __name__ == '__main__':
             iter_log          = 250,
             iter_save         = 500,
             first_iter_save   = 2500,
+            max_iter          = int(args.iterations),
         )

@@ -52,7 +52,7 @@ def mask_to_csv(image_id, submit_dir):
 
 def submit(sha, server, model_checkpoint, fold):
 
-    out_dir = project_repo + f"result/Baseline/fold{'_'.join(map(str, fold))}"
+    out_dir = project_repo + f"/result/Baseline/fold{'_'.join(map(str, fold))}"
     initial_checkpoint = out_dir + f'/checkpoint_{sha}/{model_checkpoint}'
 
     print(f"submit with server={server}")
