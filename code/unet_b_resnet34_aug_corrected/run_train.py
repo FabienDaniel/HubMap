@@ -447,9 +447,8 @@ if __name__ == '__main__':
             fold              = fold,
             start_lr          = 0.001,
             batch_size        = 32,
-            num_iteration     = 8000,
+            num_iteration     = int(args.iterations),
             iter_log          = 250,
             iter_save         = 500,
-            first_iter_save   = 2500,
-            max_iter          = int(args.iterations),
+            first_iter_save   = 2500
         )
