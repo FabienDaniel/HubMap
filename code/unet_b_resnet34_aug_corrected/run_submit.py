@@ -50,15 +50,24 @@ def mask_to_csv(image_id, submit_dir):
     return df
 
 
-def submit(sha, server, model_checkpoint, fold):
+def submit(sha, server, iterations, fold):
 
     out_dir = project_repo + f"/result/Baseline/fold{'_'.join(map(str, fold))}"
+    _checkpoint_dir = out_dir + f"/checkpoint_{sha}/"
+
+    iter_tag = f"{int(iterations):08}"
+
+    [model_checkpoint] = [_file for _file in os.listdir(_checkpoint_dir)
+                          if iter_tag in _file.split('_')[0]]
+
     initial_checkpoint = out_dir + f'/checkpoint_{sha}/{model_checkpoint}'
+
+    print(initial_checkpoint)
 
     print(f"submit with server={server}")
 
     #---
-    submit_dir = out_dir + f'/predictions_{sha}/%s-%s-mean' % (server, initial_checkpoint[-18:-4])
+    submit_dir = out_dir + f'/predictions_{sha}/%s-%s-mean' % (server, iter_tag)
     os.makedirs(submit_dir, exist_ok=True)
 
     log = Logger()
@@ -215,12 +224,12 @@ def submit(sha, server, model_checkpoint, fold):
 
     #-----
     if server == 'kaggle':
-        csv_file = submit_dir + f'/submission_{sha}-%s-%s.csv' % (out_dir.split('/')[-1], initial_checkpoint[-18:-4])
+        csv_file = submit_dir + f'/submission_{sha}-%s-%s.csv' % (out_dir.split('/')[-1], iter_tag)
         df = mask_to_csv(valid_image_id, submit_dir)
         df.to_csv(csv_file, index=False)
         print(df)
 
-    zz=0
+    zz = 0
 
 
 
@@ -288,13 +297,17 @@ if __name__ == '__main__':
         print("unsupported format for fold")
         sys.exit()
 
-    if args.Iterations:
-        print("Model taken at iterations: % s" % args.Iterations)
-        model_checkpoint = f'{int(args.Iterations):08}_model.pth'
-        print(f' using model: {model_checkpoint}')
-    else:
+    if not args.Iterations:
         print("iterations missing")
         sys.exit()
+
+    # if args.Iterations:
+    #     print("Model taken at iterations: % s" % args.Iterations)
+    #     model_checkpoint = f'{int(args.Iterations):08}_model.pth'
+    #     print(f' using model: {model_checkpoint}')
+    # else:
+    #     print("iterations missing")
+    #     sys.exit()
 
     if args.Server in ['kaggle', 'local']:
         print("Server: % s" % args.Server)
@@ -307,15 +320,15 @@ if __name__ == '__main__':
     print(f"current commit: {model_sha}")
 
     changedFiles = [item.a_path for item in repo.index.diff(None) if item.a_path.endswith(".py")]
-    if len(changedFiles) > 0:
-        print("ABORT submission -- There are unstaged files:")
-        for _file in changedFiles:
-            print(f" * {_file}")
-
-    else:
-        submit(model_sha,
-               server=args.Server,
-               model_checkpoint=model_checkpoint,
-               fold=fold
-               )
+    # if len(changedFiles) > 0:
+    #     print("ABORT submission -- There are unstaged files:")
+    #     for _file in changedFiles:
+    #         print(f" * {_file}")
+    #
+    # else:
+    submit(model_sha,
+           server=args.Server,
+           iterations=args.Iterations,
+           fold=fold
+           )
 
