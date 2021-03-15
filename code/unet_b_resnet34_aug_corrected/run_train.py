@@ -6,6 +6,7 @@ import git
 from code.common import COMMON_STRING, DataLoader, RandomSampler, SequentialSampler, time_to_str
 from code.data_preprocessing.dataset_v2020_11_12 import HuDataset, make_image_id, null_collate
 from code.lib.utility.file import Logger
+from code.lib.training.checkpoint_bookeeping import CheckpointUpdate
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
@@ -297,26 +298,31 @@ def run_train(show_valid_images=False,
     iteration = start_iteration
     epoch = start_epoch
     rate = 0
+
+    bookeeping = CheckpointUpdate(
+        net=net,
+        first_iter_save=first_iter_save,
+        iter_save=iter_save,
+        out_dir=out_dir,
+        sha=sha,
+        nbest=5
+    )
+
     while iteration < num_iteration:
 
         for t, batch in enumerate(train_loader):
 
             if iteration % iter_valid == 0:
                 valid_loss = do_valid(net, valid_loader)
-                pass
+                bookeeping.update(
+                    iteration=iteration,
+                    epoch=epoch,
+                    score=valid_loss[0]
+                )
 
             if iteration % iter_log == 0:
                 print('\r', end='', flush=True)
                 log.write(message(mode='log') + '\n')
-
-            if iteration in iter_save and iteration > first_iter_save:
-                if iteration != start_iteration:
-                    torch.save({
-                        'state_dict': net.state_dict(),
-                        'iteration': iteration,
-                        'epoch': epoch,
-                    }, out_dir + f'/checkpoint_{sha}/%08d_model.pth' % iteration)
-                    pass
 
             # learning rate schduler -------------
             # adjust_learning_rate(optimizer, schduler(iteration))
@@ -449,6 +455,7 @@ if __name__ == '__main__':
             batch_size        = 32,
             num_iteration     = int(args.iterations),
             iter_log          = 250,
-            iter_save         = 500,
-            first_iter_save   = 2500
+            iter_save         = 250,
+            first_iter_save   = 0
         )
+
