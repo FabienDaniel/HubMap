@@ -139,6 +139,7 @@ def do_valid(net, valid_loader):
 def run_train(show_valid_images=False,
               sha='',
               fold=None,
+              loss_type='bce',
               *args,
               **kwargs
               ):
@@ -280,6 +281,7 @@ def run_train(show_valid_images=False,
 
     log.write('** start training here! **\n')
     log.write('   is_mixed_precision = %s \n' % str(is_mixed_precision))
+    log.write('   loss_type = %s \n' % loss_type)
     log.write('   batch_size = %d \n' % batch_size)
     log.write('   num_iterations = %d \n' % num_iteration)
     log.write('   experiment = %s\n' % str(__file__.split('/')[-2:]))
@@ -356,16 +358,20 @@ def run_train(show_valid_images=False,
             net.train()
             optimizer.zero_grad()
 
+            ################################################
+            ### Compute the loss ---------------------------
+            ################################################
             if is_mixed_precision:
                 # assert (False)
                 image = image.half()
                 with amp.autocast():
                     logit = data_parallel(net, image)
-                    # loss = criterion_binary_cross_entropy(logit, mask)
-                    # loss = criterion_lovasz(logit, mask, mode='soft_hinge')
 
-                    criterion = DiceLoss()
-                    loss = criterion(logit, mask)
+                    if loss_type == 'bce':
+                        loss = criterion_binary_cross_entropy(logit, mask)
+                    elif loss_type == 'dice':
+                        criterion = DiceLoss()
+                        loss = criterion(logit, mask)
 
 
                 scaler.scale(loss).backward()
@@ -378,13 +384,20 @@ def run_train(show_valid_images=False,
                 logit = net(image)
                 # loss = criterion_binary_cross_entropy(logit, mask)
 
-                criterion = DiceLoss()
-                loss = criterion(logit, mask)
+                # criterion = DiceLoss()
+                # loss = criterion(logit, mask)
+
+                if loss_type == 'bce':
+                    loss = criterion_binary_cross_entropy(logit, mask)
+                elif loss_type == 'dice':
+                    criterion = DiceLoss()
+                    loss = criterion(logit, mask)
 
                 loss.backward()
                 optimizer.step()
-
-            # print statistics  --------
+            ##############################
+            # print statistics  ----------
+            ##############################
             epoch += 1 / len(train_loader)
             iteration += 1
 
@@ -493,6 +506,7 @@ if __name__ == '__main__':
             num_iteration     = int(args.iterations),
             iter_log          = 250,
             iter_save         = 250,
-            first_iter_save   = 0
+            first_iter_save   = 0,
+            loss_type         = "bce"
         )
 

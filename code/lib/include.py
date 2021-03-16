@@ -72,9 +72,3 @@ def set_all_seeds(seed):
   torch.manual_seed(seed)
   torch.cuda.manual_seed(seed)
   torch.backends.cudnn.deterministic = True
-
-##############################################################
-'''
-/opt/anaconda3/bin/conda install --name env_pytorch1.60  -c anaconda numpy
-/opt/anaconda3/bin/conda install --name env_pytorch1.60  -c conda-forge opencv
-'''
