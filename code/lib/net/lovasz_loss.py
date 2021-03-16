@@ -2,8 +2,14 @@
 #
 # Lovasz-Softmax and Jaccard hinge loss in PyTorch
 # Maxim Berman 2018 ESAT-PSI KU Leuven (MIT License)
+import torch
 
-from lib.include import *
+
+import torch.nn as nn
+import torch.nn.functional as F
+# import torch.optim as optim
+# from torch.nn.parallel.data_parallel import data_parallel
+# from code.lib.include import *
 
 # Computes gradient of the Lovasz extension w.r.t sorted errors
 # See Alg. 1 in paper
@@ -41,13 +47,13 @@ def lovasz_hinge_one(logit , truth):
 
 def lovasz_loss(logit, truth, mode='hinge'):
 
-    if mode=='hinge':
+    if mode == 'hinge':
         lovasz_one = lovasz_hinge_one
-    elif mode=='soft_hinge':
+    elif mode == 'soft_hinge':
         lovasz_one = lovasz_soft_hinge_one
-    elif mode=='logistic':
+    elif mode == 'logistic':
         lovasz_one = lovasz_logistic_one
-    elif mode=='exp':
+    elif mode == 'exp':
         lovasz_one = lovasz_exp_one
     else:
         raise NotImplementedError

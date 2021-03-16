@@ -19,6 +19,10 @@ from code.unet_b_resnet34_aug_corrected.image_preprocessing import do_random_cro
 from code.lib.net.lookahead import *
 from code.lib.net.radam import *
 from code.lib.net.rate import *
+from code.lib.net.lovasz_loss import *
+from code.lib.net.other_loss import *
+from code.lib.net.segmentation_losses import *
+
 from timeit import default_timer as timer
 from torch.nn.parallel.data_parallel import data_parallel
 
@@ -32,7 +36,7 @@ class AmpNet(Net):
         return super(AmpNet, self).forward(*args)
 
 
-is_mixed_precision = True
+is_mixed_precision = False
 
 #################################################################################################
 
@@ -113,6 +117,16 @@ def do_valid(net, valid_loader):
     mask = np.concatenate(valid_mask)
 
     loss = np_binary_cross_entropy_loss(probability, mask)
+
+    # print()
+    # print(probability.shape)
+    # print(type(probability), type(mask))
+    # _tmp = torch.from_numpy(probability)
+    #
+    # print()
+    #
+    # loss = lovasz_loss(torch.logit(torch.from_numpy(probability)), mask)
+
     dice = np_dice_score(probability, mask)
     tp, tn = np_accuracy(probability, mask)
     return [dice, loss, tp, tn]
@@ -252,7 +266,7 @@ def run_train(show_valid_images=False,
     iter_log = kwargs.get('iter_log', 250)              # show results every iter_log
     first_iter_save = kwargs.get('first_iter_save', 0)  # first checkpoint kept
     iter_valid = iter_log                               # validate every iter_valid
-    iter_save = list(range(0, num_iteration, iter_log))
+    # iter_save = list(range(0, num_iteration + 1, iter_log))
 
     log.write('optimizer\n  %s\n' % optimizer)
     # log.write('schduler\n  %s\n'%(schduler))
@@ -261,9 +275,13 @@ def run_train(show_valid_images=False,
     ######################################################################
     ## start training here! ##############################################
     ######################################################################
+
+    num_iteration = (num_iteration // len(train_loader) + 1) * len(train_loader)
+
     log.write('** start training here! **\n')
     log.write('   is_mixed_precision = %s \n' % str(is_mixed_precision))
     log.write('   batch_size = %d \n' % batch_size)
+    log.write('   num_iterations = %d \n' % num_iteration)
     log.write('   experiment = %s\n' % str(__file__.split('/')[-2:]))
     log.write('                     |-------------- VALID---------|---- TRAIN/BATCH ----------------\n')
     log.write('rate     iter  epoch | dice   loss   tp     tn     | loss           | time           \n')
@@ -272,11 +290,13 @@ def run_train(show_valid_images=False,
     # 0.00100   0.50  0.80 | 0.891  0.020  0.000  0.000  | 0.000  0.000   |  0 hr 02 min
 
     def message(mode='print'):
+        if iteration % iter_valid == 0 and iteration > 0:
+            iter_save = True
         if mode == 'print':
             asterisk = ' '
             loss = batch_loss
         if mode == 'log':
-            asterisk = '*' if iteration in iter_save else ' '
+            asterisk = '*' if iter_save else ' '
             loss = train_loss
 
         text = \
@@ -302,7 +322,7 @@ def run_train(show_valid_images=False,
     bookeeping = CheckpointUpdate(
         net=net,
         first_iter_save=first_iter_save,
-        iter_save=iter_save,
+        # iter_save=iter_save,
         out_dir=out_dir,
         sha=sha,
         nbest=5
@@ -312,7 +332,7 @@ def run_train(show_valid_images=False,
 
         for t, batch in enumerate(train_loader):
 
-            if iteration % iter_valid == 0:
+            if iteration % iter_valid == 0 and iteration > 0:
                 valid_loss = do_valid(net, valid_loader)
                 bookeeping.update(
                     iteration=iteration,
@@ -320,7 +340,7 @@ def run_train(show_valid_images=False,
                     score=valid_loss[0]
                 )
 
-            if iteration % iter_log == 0:
+            if iteration % iter_log == 0 and iteration > 0:
                 print('\r', end='', flush=True)
                 log.write(message(mode='log') + '\n')
 
@@ -341,7 +361,12 @@ def run_train(show_valid_images=False,
                 image = image.half()
                 with amp.autocast():
                     logit = data_parallel(net, image)
-                    loss = criterion_binary_cross_entropy(logit, mask)
+                    # loss = criterion_binary_cross_entropy(logit, mask)
+                    # loss = criterion_lovasz(logit, mask, mode='soft_hinge')
+
+                    criterion = DiceLoss()
+                    loss = criterion(logit, mask)
+
 
                 scaler.scale(loss).backward()
                 scaler.step(optimizer)
@@ -351,7 +376,10 @@ def run_train(show_valid_images=False,
 
                 # logit = data_parallel(net, image)
                 logit = net(image)
-                loss = criterion_binary_cross_entropy(logit, mask)
+                # loss = criterion_binary_cross_entropy(logit, mask)
+
+                criterion = DiceLoss()
+                loss = criterion(logit, mask)
 
                 loss.backward()
                 optimizer.step()

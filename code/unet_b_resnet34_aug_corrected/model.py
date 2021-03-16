@@ -9,6 +9,8 @@ from code.unet_b_resnet34_aug_corrected.b_resnet34 import *
 # https://discourse.aicrowd.com/t/explainer-pytorch-starter-0-857-f1-score-on-public-lb/3790
 
 
+from code.lib.net.lovasz_loss import *
+
 #------------------------------------
 def np_binary_cross_entropy_loss(probability, mask):
     p = probability.reshape(-1)
@@ -44,6 +46,22 @@ def np_accuracy(probability, mask):
     return tp, tn
 
 
+
+def criterion_binary_cross_entropy(logit, mask):
+    logit = logit.reshape(-1)
+    mask = mask.reshape(-1)
+
+    loss = F.binary_cross_entropy_with_logits(logit, mask)
+    return loss
+#
+#
+# def criterion_lovasz(logit, mask, mode='soft_hinge'):
+#     logit = logit.reshape(-1)
+#     mask = mask.reshape(-1)
+#
+#     loss = lovasz_loss(logit, mask, mode)
+#     # loss = F.binary_cross_entropy_with_logits(logit, mask)
+#     return loss
 
 
 #unet ################################################################
@@ -179,18 +197,6 @@ class Net(nn.Module):
 
         logit = self.logit(z)
         return logit
-
-'''
- 
- 
-
-'''
-def criterion_binary_cross_entropy(logit, mask):
-    logit = logit.reshape(-1)
-    mask = mask.reshape(-1)
-
-    loss = F.binary_cross_entropy_with_logits(logit, mask)
-    return loss
 
 #--------------------------------------------------------------------
 

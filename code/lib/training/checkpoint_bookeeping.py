@@ -6,11 +6,11 @@ import numpy as np
 class CheckpointUpdate:
     """
     """
-    def __init__(self, net, first_iter_save, iter_save, out_dir, sha, nbest=None):
+    def __init__(self, net, first_iter_save, out_dir, sha, nbest=None):
 
         self.net = net
         self.first_iter_save = first_iter_save
-        self.iter_save = iter_save
+        # self.iter_save = iter_save
         self.directory = out_dir + f'/checkpoint_{sha}'
         self.nbest = nbest
         self.best_scores = []
@@ -22,7 +22,7 @@ class CheckpointUpdate:
             self._best_score_save(iteration, epoch, score)
 
     def _periodic_save(self, iteration, epoch):
-        if iteration in self.iter_save and iteration > self.first_iter_save:
+        if iteration > self.first_iter_save:
             torch.save({
                 'state_dict': self.net.state_dict(),
                 'iteration': iteration,
@@ -31,7 +31,7 @@ class CheckpointUpdate:
 
     def _best_score_save(self, iteration, epoch, score):
 
-        if iteration not in self.iter_save: return
+        # if iteration not in self.iter_save: return
         if iteration <= self.first_iter_save: return
 
         _name = f"{iteration:08}_{score:.6f}_model.pth"
