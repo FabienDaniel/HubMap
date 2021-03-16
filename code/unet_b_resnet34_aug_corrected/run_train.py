@@ -375,7 +375,9 @@ def run_train(show_valid_images=False,
                     elif loss_type == 'dice_bce':
                         criterion = DiceBCELoss()
                         loss = criterion(logit, mask)
-
+                    elif loss_type == 'focal':
+                        criterion = FocalLoss()
+                        loss = criterion(logit, mask)
 
                 scaler.scale(loss).backward()
                 scaler.step(optimizer)
@@ -397,6 +399,9 @@ def run_train(show_valid_images=False,
                     loss = criterion(logit, mask)
                 elif loss_type == 'dice_bce':
                     criterion = DiceBCELoss()
+                    loss = criterion(logit, mask)
+                elif loss_type == 'focal':
+                    criterion = FocalLoss()
                     loss = criterion(logit, mask)
 
                 loss.backward()
@@ -513,6 +518,6 @@ if __name__ == '__main__':
             iter_log          = 250,
             iter_save         = 250,
             first_iter_save   = 0,
-            loss_type         = "dice_bce"
+            loss_type         = "focal"
         )
 

@@ -65,15 +65,11 @@ class IoULoss(nn.Module):
         return 1 - IoU
 
 
-ALPHA = 0.8
-GAMMA = 2
-
-
 class FocalLoss(nn.Module):
     def __init__(self, weight=None, size_average=True):
         super(FocalLoss, self).__init__()
 
-    def forward(self, inputs, targets, alpha=ALPHA, gamma=GAMMA, smooth=1):
+    def forward(self, inputs, targets, alpha=0.8, gamma=2, smooth=1):
         # comment out if your model contains a sigmoid or equivalent activation layer
         inputs = F.sigmoid(inputs)
 
@@ -87,3 +83,4 @@ class FocalLoss(nn.Module):
         focal_loss = alpha * (1 - BCE_EXP) ** gamma * BCE
 
         return focal_loss
+
