@@ -372,6 +372,9 @@ def run_train(show_valid_images=False,
                     elif loss_type == 'dice':
                         criterion = DiceLoss()
                         loss = criterion(logit, mask)
+                    elif loss_type == 'dice_bce':
+                        criterion = DiceBCELoss()
+                        loss = criterion(logit, mask)
 
 
                 scaler.scale(loss).backward()
@@ -391,6 +394,9 @@ def run_train(show_valid_images=False,
                     loss = criterion_binary_cross_entropy(logit, mask)
                 elif loss_type == 'dice':
                     criterion = DiceLoss()
+                    loss = criterion(logit, mask)
+                elif loss_type == 'dice_bce':
+                    criterion = DiceBCELoss()
                     loss = criterion(logit, mask)
 
                 loss.backward()
@@ -507,6 +513,6 @@ if __name__ == '__main__':
             iter_log          = 250,
             iter_save         = 250,
             first_iter_save   = 0,
-            loss_type         = "dice"
+            loss_type         = "dice_bce"
         )
 
