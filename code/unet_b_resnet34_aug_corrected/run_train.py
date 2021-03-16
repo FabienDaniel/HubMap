@@ -507,6 +507,6 @@ if __name__ == '__main__':
             iter_log          = 250,
             iter_save         = 250,
             first_iter_save   = 0,
-            loss_type         = "bce"
+            loss_type         = "dice"
         )
 
