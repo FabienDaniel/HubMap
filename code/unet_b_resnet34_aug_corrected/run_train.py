@@ -443,6 +443,15 @@ def run_train(show_valid_images=False,
 
 if __name__ == '__main__':
 
+    # Setting seed
+    seed = 33
+    random.seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
+
     ########################
     # define run arguments
     ########################
