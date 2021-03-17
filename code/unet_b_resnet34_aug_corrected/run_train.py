@@ -378,7 +378,10 @@ def run_train(show_valid_images=False,
                     elif loss_type == 'focal':
                         criterion = FocalLoss()
                         loss = criterion(logit, mask)
-
+                    elif loss_type == 'tversky':
+                        criterion = TverskyLoss()
+                        loss = criterion(logit, mask, alpha=1, beta=1)
+                        
                 scaler.scale(loss).backward()
                 scaler.step(optimizer)
                 scaler.update()
@@ -403,6 +406,9 @@ def run_train(show_valid_images=False,
                 elif loss_type == 'focal':
                     criterion = FocalLoss()
                     loss = criterion(logit, mask)
+                elif loss_type == 'tversky':
+                    criterion = TverskyLoss()
+                    loss = criterion(logit, mask, alpha=1, beta=1)
 
                 loss.backward()
                 optimizer.step()
@@ -518,6 +524,6 @@ if __name__ == '__main__':
             iter_log          = 250,
             iter_save         = 250,
             first_iter_save   = 0,
-            loss_type         = "focal"
+            loss_type         = "tversky"
         )
 
