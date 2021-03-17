@@ -385,7 +385,7 @@ def run_train(show_valid_images=False,
                         criterion = FocalTverskyLoss()
                         loss = criterion(logit, mask, alpha=1, beta=1, gamma=2)
                     elif loss_type == 'weighted_bce':
-                        criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(1.5))
+                        criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(2.0))
                         loss = criterion(logit, mask)
 
                 scaler.scale(loss).backward()
@@ -419,7 +419,7 @@ def run_train(show_valid_images=False,
                     criterion = FocalTverskyLoss()
                     loss = criterion(logit, mask, alpha=1, beta=1, gamma=2)
                 elif loss_type == 'weighted_bce':
-                    criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(1.5))
+                    criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(2.0))
                     loss = criterion(logit, mask)
 
                 loss.backward()
