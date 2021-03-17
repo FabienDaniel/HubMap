@@ -381,7 +381,13 @@ def run_train(show_valid_images=False,
                     elif loss_type == 'tversky':
                         criterion = TverskyLoss()
                         loss = criterion(logit, mask, alpha=1, beta=1)
-                        
+                    elif loss_type == 'focal_tversky':
+                        criterion = FocalTverskyLoss()
+                        loss = criterion(logit, mask, alpha=1, beta=1, gamma=2)
+                    elif loss_type == 'weighted_bce':
+                        criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(1.5))
+                        loss = criterion(logit, mask)
+
                 scaler.scale(loss).backward()
                 scaler.step(optimizer)
                 scaler.update()
@@ -409,6 +415,12 @@ def run_train(show_valid_images=False,
                 elif loss_type == 'tversky':
                     criterion = TverskyLoss()
                     loss = criterion(logit, mask, alpha=1, beta=1)
+                elif loss_type == 'focal_tversky':
+                    criterion = FocalTverskyLoss()
+                    loss = criterion(logit, mask, alpha=1, beta=1, gamma=2)
+                elif loss_type == 'weighted_bce':
+                    criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(1.5))
+                    loss = criterion(logit, mask)
 
                 loss.backward()
                 optimizer.step()
@@ -524,6 +536,6 @@ if __name__ == '__main__':
             iter_log          = 250,
             iter_save         = 250,
             first_iter_save   = 0,
-            loss_type         = "tversky"
+            loss_type         = "weighted_bce"
         )
 

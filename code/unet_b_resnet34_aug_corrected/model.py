@@ -46,7 +46,6 @@ def np_accuracy(probability, mask):
     return tp, tn
 
 
-
 def criterion_binary_cross_entropy(logit, mask):
     logit = logit.reshape(-1)
     mask = mask.reshape(-1)
