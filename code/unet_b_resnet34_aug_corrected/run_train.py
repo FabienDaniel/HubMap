@@ -4,7 +4,7 @@ import os
 import git
 
 from code.common import COMMON_STRING, DataLoader, RandomSampler, SequentialSampler, time_to_str
-from code.data_preprocessing.dataset_v2020_11_12 import HuDataset, make_image_id, null_collate
+from code.data_preprocessing.dataset_v2020_11_12 import HuDataset, make_image_id, null_collate, train_augment
 from code.lib.utility.file import Logger
 from code.lib.training.checkpoint_bookeeping import CheckpointUpdate
 
@@ -43,29 +43,30 @@ is_mixed_precision = False
 image_size = 256
 
 
-def train_augment(record):
-    image = record['image']
-    mask = record['mask']
-
-    for fn in np.random.choice([
-        lambda image, mask: do_random_rotate_crop(image, mask, size=image_size, mag=45),
-        lambda image, mask: do_random_scale_crop(image, mask, size=image_size, mag=0.075),
-        lambda image, mask: do_random_crop(image, mask, size=image_size),
-    ], 1): image, mask = fn(image, mask)
-
-    image, mask = do_random_hsv(image, mask, mag=[0.1, 0.2, 0])
-    for fn in np.random.choice([
-        lambda image, mask: (image, mask),
-        lambda image, mask: do_random_contast(image, mask, mag=0.8),
-        lambda image, mask: do_random_gain(image, mask, mag=0.9),
-        # lambda image, mask : do_random_hsv(image, mask, mag=[0.1, 0.2, 0]),
-        lambda image, mask: do_random_noise(image, mask, mag=0.1),
-    ], 1): image, mask = fn(image, mask)
-
-    image, mask = do_random_flip_transpose(image, mask)
-    record['mask'] = mask
-    record['image'] = image
-    return record
+# def train_augment(record):
+#     image = record['image']
+#     mask = record['mask']
+#
+#
+#     for fn in np.random.choice([
+#         lambda image, mask: do_random_rotate_crop(image, mask, size=image_size, mag=45),
+#         lambda image, mask: do_random_scale_crop(image, mask, size=image_size, mag=0.075),
+#         lambda image, mask: do_random_crop(image, mask, size=image_size),
+#     ], 1): image, mask = fn(image, mask)
+#
+#     image, mask = do_random_hsv(image, mask, mag=[0.1, 0.2, 0])
+#     for fn in np.random.choice([
+#         lambda image, mask: (image, mask),
+#         lambda image, mask: do_random_contast(image, mask, mag=0.8),
+#         lambda image, mask: do_random_gain(image, mask, mag=0.9),
+#         # lambda image, mask : do_random_hsv(image, mask, mag=[0.1, 0.2, 0]),
+#         lambda image, mask: do_random_noise(image, mask, mag=0.1),
+#     ], 1): image, mask = fn(image, mask)
+#
+#     image, mask = do_random_flip_transpose(image, mask)
+#     record['mask'] = mask
+#     record['image'] = image
+#     return record
 
 
 # ------------------------------------

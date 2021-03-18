@@ -1,3 +1,5 @@
+import argparse
+
 from code.common import *
 import tifffile as tiff
 
@@ -199,54 +201,46 @@ def to_tile(image,
 #         cv2.waitKey(0)
 
 ## augmentation ######################################################################
-
-def do_random_flip_transpose(image, mask):
-    if np.random.rand()>0.5:
-        image = cv2.flip(image,0)
-        mask = cv2.flip(mask,0)
-    if np.random.rand()>0.5:
-        image = cv2.flip(image,1)
-        mask = cv2.flip(mask,1)
-    if np.random.rand()>0.5:
-        image = image.transpose(1,0,2)
-        mask = mask.transpose(1,0)
-
-    image = np.ascontiguousarray(image)
-    mask = np.ascontiguousarray(mask)
-    return image, mask
+#
+# def do_random_flip_transpose(image, mask):
+#     if np.random.rand()>0.5:
+#         image = cv2.flip(image,0)
+#         mask = cv2.flip(mask,0)
+#     if np.random.rand()>0.5:
+#         image = cv2.flip(image,1)
+#         mask = cv2.flip(mask,1)
+#     if np.random.rand()>0.5:
+#         image = image.transpose(1,0,2)
+#         mask = mask.transpose(1,0)
+#
+#     image = np.ascontiguousarray(image)
+#     mask = np.ascontiguousarray(mask)
+#     return image, mask
 
 
 ######################################################################################
 
-def run_check_dataset():
-
-    image_id = make_image_id ('train-0')
-    dataset = HuDataset(image_id)
-    print(dataset)
-
-    for i in range(100):
-        i = np.random.choice(len(dataset))
-        r = dataset[i]
-
-        print(r['index'])
-        print(r['tile_id'])
-        print(r['image'].shape)
-        print(r['mask'].shape)
-        print('')
-
-
-        image_show('image', r['image'])
-        image_show('mask', r['mask'])
-        cv2.waitKey(0)
-        #exit(0)
-
-
-# main #################################################################
-if __name__ == '__main__':
-    #run_check_tile()
-    run_check_dataset()
-    #run_check_augment()
-
+# def run_check_dataset():
+#
+#     image_id = make_image_id ('train-0')
+#     dataset = HuDataset(image_id)
+#     print(dataset)
+#
+#     for i in range(100):
+#         i = np.random.choice(len(dataset))
+#         r = dataset[i]
+#
+#         print(r['index'])
+#         print(r['tile_id'])
+#         print(r['image'].shape)
+#         print(r['mask'].shape)
+#         print('')
+#
+#
+#         image_show('image', r['image'])
+#         image_show('mask', r['mask'])
+#         cv2.waitKey(0)
+#         #exit(0)
 
 
 

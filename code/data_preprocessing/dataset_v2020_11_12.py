@@ -1,8 +1,12 @@
+import argparse
+
 from code.common import *
 from code.hubmap_v2 import *
 
+from code.unet_b_resnet34_aug_corrected.image_preprocessing import do_random_crop, do_random_rotate_crop, \
+    do_random_scale_crop, do_random_hsv, do_random_contast, do_random_gain, do_random_noise, \
+    do_random_flip_transpose
 
-#############################################################################
 
 def make_image_id(mode='train', valid_ids=None):
     train_image_id = {
@@ -269,55 +273,82 @@ def null_collate(batch):
 
 ######################################################################################
 
-def run_check_dataset():
+# def run_check_dataset():
+#
+#     dataset = HuDataset(
+#         image_id = [
+#             make_image_id ('valid-0'),
+#         ],
+#         image_dir =[
+#             '0.25_480_240_train',
+#         ]
+#     )
+#     print(dataset)
+#
+#     for i in range(1000):
+#         i = np.random.choice(len(dataset)) #98 #
+#         r = dataset[i]
+#
+#         print(r['index'])
+#         print(r['tile_id'])
+#         print(r['image'].shape)
+#         print(r['mask'].shape)
+#         print('')
+#
+#         filtered = filter_small(r['mask'],min_size=800*0.25)
+#
+#
+#         image_show_norm('image', r['image'], min=0, max=1)
+#         image_show_norm('mask',  r['mask'],  min=0, max=1)
+#         image_show ('filtered',  filtered)
+#         cv2.waitKey(0)
+#         #exit(0)
 
-    dataset = HuDataset(
-        image_id = [
-            make_image_id ('valid-0'),
-        ],
-        image_dir =[
-            '0.25_480_240_train',
-        ]
-    )
-    print(dataset)
 
-    for i in range(1000):
-        i = np.random.choice(len(dataset)) #98 #
-        r = dataset[i]
-
-        print(r['index'])
-        print(r['tile_id'])
-        print(r['image'].shape)
-        print(r['mask'].shape)
-        print('')
-
-        filtered = filter_small(r['mask'],min_size=800*0.25)
+image_size = 256
 
 
-        image_show_norm('image', r['image'], min=0, max=1)
-        image_show_norm('mask',  r['mask'],  min=0, max=1)
-        image_show ('filtered',  filtered)
-        cv2.waitKey(0)
-        #exit(0)
+def train_augment(record):
+    image = record['image']
+    mask = record['mask']
+
+    for fn in np.random.choice([
+        lambda image, mask: do_random_rotate_crop(image, mask, size=image_size, mag=45, verbose=True),
+        lambda image, mask: do_random_scale_crop(image, mask, size=image_size, mag=0.075, verbose=True),
+        lambda image, mask: do_random_crop(image, mask, size=image_size, verbose=True),
+    ], 1): image, mask = fn(image, mask)
+
+    image, mask = do_random_hsv(image, mask, mag=[0.1, 0.2, 0])
+    for fn in np.random.choice([
+        lambda image, mask: (image, mask),
+        lambda image, mask: do_random_contast(image, mask, mag=0.5, verbose=True),
+        lambda image, mask: do_random_gain(image, mask, mag=0.9, verbose=True),
+        # lambda image, mask : do_random_hsv(image, mask, mag=[0.1, 0.2, 0], verbose=True),
+        lambda image, mask: do_random_noise(image, mask, mag=0.03, verbose=True),
+    ], 1): image, mask = fn(image, mask)
+
+    image, mask = do_random_flip_transpose(image, mask)
+    record['mask'] = mask
+    record['image'] = image
+    return record['image'], record['mask']
+
+
+def augment(image, mask):
+    #image, mask = do_random_crop(image, mask, size=320)
+    #image, mask = do_random_scale_crop(image, mask, size=320, mag=0.1)
+    #image, mask = do_random_rotate_crop(image, mask, size=320, mag=30 )
+    #image, mask = do_random_contast(image, mask, mag=0.8 )
+    return do_random_hsv(image, mask, mag=[0.1, 0.2, 0])
+    image, mask = do_random_gain(image, mask, mag=0.8)
+    #image, mask = do_random_noise(image, mask, mag=0.1)
 
 
 def run_check_augment():
-    def augment(image, mask):
-        #image, mask = do_random_crop(image, mask, size=320)
-        #image, mask = do_random_scale_crop(image, mask, size=320, mag=0.1)
-        #image, mask = do_random_rotate_crop(image, mask, size=320, mag=30 )
-        #image, mask = do_random_contast(image, mask, mag=0.8 )
-        image, mask = do_random_hsv(image, mask, mag=[0.1,0.2,0])
-        image, mask = do_random_gain(image, mask, mag=0.8 )
-        #image, mask = do_random_noise(image, mask, mag=0.1)
-
-        return image, mask
-
 
     dataset = HuDataset(
-        image_id  = [make_image_id('train-0')],
-        image_dir = ['0.25_480_240_train'],
-    ) #'0.25_320_192_train'
+        image_id  = [make_image_id('train', [0])],
+        image_dir = ['0.25_320_train'],
+    )
     print(dataset)
 
     for i in range(1000):
@@ -326,24 +357,33 @@ def run_check_augment():
         image = r['image']
         mask  = r['mask']
 
-        print('%2d --------------------------- '%(i))
-        overlay = np.hstack([image, np.tile(mask.reshape(*image.shape[:2], 1), (1, 1, 3)),])
-        image_show_norm('overlay', overlay, min=0, max=1)
+        print('%2d --------------------------- ' % i)
+        # overlay = np.hstack([image, np.tile(mask.reshape(*image.shape[:2], 1), (1, 1, 3)),])
+        image_show_norm('overlay', image)
         cv2.waitKey(1)
 
-        if 1:
-            for i in range(100):
-                image1, mask1 =  augment(image.copy(), mask.copy())
-                overlay1 = np.hstack([image1, np.tile(mask1.reshape(*image1.shape[:2], 1), (1, 1, 3)),])
-                image_show_norm('overlay1', overlay1, min=0, max=1)
-                cv2.waitKey(0)
+        for i in range(100):
+            print(70 * '-')
+            image1, mask1 = train_augment({
+                'image': image.copy(),
+                'mask' : mask.copy()
+            })
+            # overlay1 = np.hstack([image1, np.tile(mask1.reshape(*image1.shape[:2], 1), (1, 1, 3)),])
+            image_show_norm('overlay1', image1)
+            cv2.waitKey(0)
 
 
 # main #################################################################
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-m", "--mode", help="fold")
 
-    #run_check_dataset()
-    run_check_augment()
+    args = parser.parse_args()
+    if not args.mode:
+        print("mode missing")
+        sys.exit()
+    elif args.mode == 'augmentation':
+        run_check_augment()
 
 
 
