@@ -6,10 +6,10 @@ import os
 from code.data_preprocessing.dataset import to_tile, read_tiff
 from code.hubmap_v2 import data_dir, image_show, raw_data_dir, project_repo
 
-tile_scale = 0.25
-tile_size  = 320
-tile_average_step = 192
-tile_min_score = 0.25
+# tile_scale = 0.25
+# tile_size  = 320
+# tile_average_step = 192
+# tile_min_score = 0.25
 
 
 # --- rle ---------------------------------
@@ -34,7 +34,9 @@ def rle_encode(mask):
     return rle
 
 
-def run_make_train_tile(train_tile_dir):
+def run_make_train_tile(tile_scale,
+                        tile_size,
+                        train_tile_dir):
 
     df_train = pd.read_csv(raw_data_dir + '/train.csv')
     print(df_train)
@@ -59,7 +61,7 @@ def run_make_train_tile(train_tile_dir):
         cv2.imwrite(raw_data_dir + '/train/%s.mask.png' % id , mask)
 
         #make tile
-        tile = to_tile(image, mask)
+        tile = to_tile(image, mask, scale=tile_scale, size=tile_size)
 
         coord = np.array(tile['coord'])
         df_image = pd.DataFrame()
@@ -95,27 +97,32 @@ def run_make_train_tile(train_tile_dir):
 #############################
 # make tile train image
 #############################
-def run_make_train_mask():
-
-    df_train = pd.read_csv(data_dir + '/train.csv')
-    print(df_train)
-    print(df_train.shape)
-
-    for i in range(0, len(df_train)):
-        _id, encoding = df_train.iloc[i]
-
-        image_file = data_dir + '/train/%s.tiff' % _id
-        image = read_tiff(image_file)
-
-        height, width = image.shape[:2]
-        mask = rle_decode(encoding, height, width, 255)
-
-        cv2.imwrite(data_dir + '/train/%s.mask.png' % _id, mask)
+# def run_make_train_mask():
+#
+#     df_train = pd.read_csv(data_dir + '/train.csv')
+#     print(df_train)
+#     print(df_train.shape)
+#
+#     for i in range(0, len(df_train)):
+#         _id, encoding = df_train.iloc[i]
+#
+#         image_file = data_dir + '/train/%s.tiff' % _id
+#         image = read_tiff(image_file)
+#
+#         height, width = image.shape[:2]
+#         mask = rle_decode(encoding, height, width, 255)
+#
+#         cv2.imwrite(data_dir + '/train/%s.mask.png' % _id, mask)
 
 
 # main #################################################################
 if __name__ == '__main__':
 
+    tile_scale = 0.5
+    tile_size = 320
+
     run_make_train_tile(
+        tile_scale=tile_scale,
+        tile_size=tile_size,
         train_tile_dir = project_repo + f'/data/tile/{tile_scale}_{tile_size}_train'
     )

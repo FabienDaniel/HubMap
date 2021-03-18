@@ -140,6 +140,8 @@ def run_train(show_valid_images=False,
               sha='',
               fold=None,
               loss_type='bce',
+              tile_scale=0.25,
+              tile_size=320,
               *args,
               **kwargs
               ):
@@ -177,7 +179,7 @@ def run_train(show_valid_images=False,
             make_image_id('train', fold),
         ],
         image_dir=[
-            '0.25_320_train',
+            f'{tile_scale}_{tile_size}_train',
         ],
         augment=train_augment,
     )
@@ -194,7 +196,7 @@ def run_train(show_valid_images=False,
     valid_dataset = HuDataset(
         image_id=[make_image_id('valid', fold)],
         image_dir=[
-            '0.25_320_train',
+            f'{tile_scale}_{tile_size}_train',
         ],
     )
     valid_loader = DataLoader(
@@ -536,6 +538,8 @@ if __name__ == '__main__':
             iter_log          = 250,
             iter_save         = 250,
             first_iter_save   = 0,
-            loss_type         = "weighted_bce"
+            loss_type         = "weighted_bce",
+            tile_scale        = 0.5,
+            tile_size         = 320
         )
 

@@ -13,19 +13,12 @@ def read_tiff(image_file):
     return image
 
 
-#----------------------------------
-tile_scale = 0.25
-tile_size  = 320
-tile_average_step = 192
-tile_min_score = 0.25
-
-
 def to_tile(image,
             mask=None,
-            scale=tile_scale,
-            size=tile_size,
-            step=tile_average_step,
-            min_score=tile_min_score):
+            scale=0.25,
+            size=320,
+            step=192,
+            min_score=0.25):
     """
 
     Parameters:
@@ -118,81 +111,92 @@ def to_tile(image,
     }
 
 
-def to_mask(tile, coord, height, width,
-    scale=tile_scale, size=tile_size, step=tile_average_step, min_score=tile_min_score):
+# def to_mask(tile, coord, height, width,
+#             scale=tile_scale,
+#             size=tile_size,
+#             step=tile_average_step,
+#             min_score=tile_min_score):
+#
+#     half = size//2
+#     mask  = np.zeros((height, width), np.float32)
+#
+#     if 0:
+#         count = np.zeros((height, width), np.float32)
+#         for t, (cx, cy, cv) in enumerate(coord):
+#             mask [cy - half:cy + half, cx - half:cx + half] += tile[t]
+#             count[cy - half:cy + half, cx - half:cx + half] += 1
+#                # simple averge, <todo> guassian weighing?
+#                # see unet paper for "Overlap-tile strategy for seamless segmentation of arbitrary large images"
+#         m = (count != 0)
+#         mask[m] /= count[m]
+#
+#     if 1:
+#         for t, (cx, cy, cv) in enumerate(coord):
+#             mask[cy - half:cy + half, cx - half:cx + half] = np.maximum(
+#                 mask[cy - half:cy + half, cx - half:cx + half], tile[t] )
+#
+#     return mask
 
-    half = size//2
-    mask  = np.zeros((height, width), np.float32)
-
-    if 0:
-        count = np.zeros((height, width), np.float32)
-        for t, (cx, cy, cv) in enumerate(coord):
-            mask [cy - half:cy + half, cx - half:cx + half] += tile[t]
-            count[cy - half:cy + half, cx - half:cx + half] += 1
-               # simple averge, <todo> guassian weighing?
-               # see unet paper for "Overlap-tile strategy for seamless segmentation of arbitrary large images"
-        m = (count != 0)
-        mask[m] /= count[m]
-
-    if 1:
-        for t, (cx, cy, cv) in enumerate(coord):
-            mask[cy - half:cy + half, cx - half:cx + half] = np.maximum(
-                mask[cy - half:cy + half, cx - half:cx + half], tile[t] )
-
-    return mask
-
-def run_check_tile():
-
-    #load a train image
-    id = 'e79de561c'
-    image_file = data_dir + '/train/%s.tiff' % id
-    image = read_tiff(image_file)
-    height, width = image.shape[:2]
-
-    #load a mask
-    df = pd.read_csv(data_dir + '/train.csv', index_col='id')
-    encoding = df.loc[id,'encoding']
-    mask = rle_decode(encoding, height, width, 255)
-
-    #make tile
-    tile = to_tile(image, mask)
-
-
-    if 1: #debug
-        overlay = tile['image_small'].copy()
-        for cx,cy,cv in tile['coord']:
-            cv = int(255 * cv)
-            cv2.circle(overlay, (cx, cy), 64, [cv,cv,cv], -1)
-            cv2.circle(overlay, (cx, cy), 64, [0, 0, 255], 16)
-        for cx,cy,cv in tile['reject']:
-            cv = int(255 * cv)
-            cv2.circle(overlay, (cx, cy), 64, [cv,cv,cv], -1)
-            cv2.circle(overlay, (cx, cy), 64, [255, 0, 0], 16)
-
-        #---
-        num = len(tile['coord'])
-        cx, cy, cv = tile['coord'][num//2]
-        cv2.rectangle(overlay,(cx-tile_size//2,cy-tile_size//2),(cx+tile_size//2,cy+tile_size//2), (0,0,255), 16)
-
-        image_show('overlay', overlay, resize=0.1)
-        cv2.waitKey(1)
-
-    # make prediction for tile
-    # e.g. predict = model(tile['tile_image'])
-    tile_predict = tile['tile_mask'] # dummy: set predict as ground truth
-
-    # make mask from tile
-    height, width = tile['image_small'].shape[:2]
-    predict = to_mask(tile_predict, tile['coord'],  height, width)
-
-    truth = tile['mask_small']#.astype(np.float32)/255
-    diff = np.abs(truth-predict)
-    print('diff', diff.max(), diff.mean())
-
-    if 1:
-        image_show_norm('diff', diff, min=0, max=1, resize=0.2)
-        image_show_norm('predict', predict, min=0, max=1, resize=0.2)
-        cv2.waitKey(0)
+# def run_check_tile():
+#
+#     #load a train image
+#     id = 'e79de561c'
+#     image_file = data_dir + '/train/%s.tiff' % id
+#     image = read_tiff(image_file)
+#     height, width = image.shape[:2]
+#
+#     #load a mask
+#     df = pd.read_csv(data_dir + '/train.csv', index_col='id')
+#     encoding = df.loc[id,'encoding']
+#     mask = rle_decode(encoding, height, width, 255)
+#
+#     #make tile
+#     tile = to_tile(image, mask)
+#
+#
+#     if 1: #debug
+#         overlay = tile['image_small'].copy()
+#         for cx,cy,cv in tile['coord']:
+#             cv = int(255 * cv)
+#             cv2.circle(overlay, (cx, cy), 64, [cv,cv,cv], -1)
+#             cv2.circle(overlay, (cx, cy), 64, [0, 0, 255], 16)
+#         for cx,cy,cv in tile['reject']:
+#             cv = int(255 * cv)
+#             cv2.circle(overlay, (cx, cy), 64, [cv,cv,cv], -1)
+#             cv2.circle(overlay, (cx, cy), 64, [255, 0, 0], 16)
+#
+#         #---
+#         num = len(tile['coord'])
+#         cx, cy, cv = tile['coord'][num//2]
+#         cv2.rectangle(overlay,(cx-tile_size//2,cy-tile_size//2),(cx+tile_size//2,cy+tile_size//2), (0,0,255), 16)
+#
+#         image_show('overlay', overlay, resize=0.1)
+#         cv2.waitKey(1)
+#
+#     # make prediction for tile
+#     # e.g. predict = model(tile['tile_image'])
+#     tile_predict = tile['tile_mask'] # dummy: set predict as ground truth
+#
+#     # make mask from tile
+#     height, width = tile['image_small'].shape[:2]
+#     predict = to_mask(tile_predict,
+#                       tile['coord'],
+#                       height,
+#                       width,
+#                       scale=scale,
+#                       size=tile_size,
+#                       step=step,
+#                       min_score=min_score)
+#
+#
+#     truth = tile['mask_small']#.astype(np.float32)/255
+#     diff = np.abs(truth-predict)
+#     print('diff', diff.max(), diff.mean())
+#
+#     if 1:
+#         image_show_norm('diff', diff, min=0, max=1, resize=0.2)
+#         image_show_norm('predict', predict, min=0, max=1, resize=0.2)
+#         cv2.waitKey(0)
 
 ## augmentation ######################################################################
 
