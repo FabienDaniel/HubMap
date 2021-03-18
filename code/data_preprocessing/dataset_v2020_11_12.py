@@ -69,10 +69,10 @@ class HuDataset(Dataset):
 
     def __str__(self):
         string  = ''
-        string += '\tlen  = %d\n'%len(self)
-        string += '\timage_dir = %s\n'%self.image_dir
-        string += '\timage_id  = %s\n'%str(self.image_id)
-        string += '\t          = %d\n'%sum(len(i) for i in self.image_id)
+        string += '\tlen  = %d\n' % len(self)
+        string += '\timage_dir = %s\n' % self.image_dir
+        string += '\timage_id  = %s\n' % str(self.image_id)
+        string += '\t          = %d\n' % sum(len(i) for i in self.image_id)
         return string
 
 
@@ -101,10 +101,12 @@ def null_collate(batch):
     index = []
     mask = []
     image = []
-    for r in batch:
+
+    for _ind, r in enumerate(batch):
         index.append(r['index'])
         mask.append(r['mask'])
         image.append(r['image'])
+
 
     image = np.stack(image)
     image = image[...,::-1]
@@ -117,7 +119,7 @@ def null_collate(batch):
     #---
     image = torch.from_numpy(image).contiguous().float()
     mask  = torch.from_numpy(mask).contiguous().unsqueeze(1)
-    mask  = (mask>0.5).float()
+    mask  = (mask > 0.5).float()
 
     return {
         'index' : index,
@@ -334,7 +336,7 @@ def train_augment(record):
     image, mask = do_random_flip_transpose(image, mask)
     record['mask'] = mask
     record['image'] = image
-    return record['image'], record['mask']
+    return record
 
 
 def augment(image, mask):
@@ -353,7 +355,6 @@ def run_check_augment():
         image_id  = [make_image_id('train', [0])],
         image_dir = ['0.25_320_train'],
     )
-    print(dataset)
 
     for i in range(1000):
     #for i in np.random.choice(len(dataset),100):
