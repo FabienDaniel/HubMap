@@ -100,6 +100,7 @@ def submit(sha, server, iterations, fold):
 
     start_timer = timer()
     for id in valid_image_id:
+        print(50*"=")
         if server == 'local':
             image_file = raw_data_dir + '/train/%s.tiff' % id
             image = read_tiff(image_file)

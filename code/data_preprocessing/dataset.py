@@ -26,44 +26,55 @@ def to_tile(image,
             size=tile_size,
             step=tile_average_step,
             min_score=tile_min_score):
+    """
+
+    Parameters:
+    -----------
+    image: <type>
+        large size image
+
+    scale: float in [0:1]
+        factor used to down scale the input image
+
+    """
 
     half = size//2
-    print(image.shape)
-    print(f"1) Scales down image by a factor {scale}")
+    print("original image size:", image.shape)
+
+    print(f"1) Scales down image by a factor: {scale}")
     image_small = cv2.resize(image, dsize=None, fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
-
-    #make score
     height, width, _ = image_small.shape
+    print(f"\tscaled image size = {height} x {width}")
 
-    print(f"scaled image size={height} x {width}")
-
-    print(f"2) Scales down image by a factor 1/32")
+    print(f"2) Scales down image by a factor: 1/32")
     vv = cv2.resize(image_small, dsize=None, fx=1 / 32, fy=1 / 32, interpolation=cv2.INTER_LINEAR)
-
-    print(f"scaled image size={vv.shape[0]} x {vv.shape[0]}")
+    print(f"\tscaled image size = {vv.shape[0]} x {vv.shape[0]}")
 
     vv = cv2.cvtColor(vv, cv2.COLOR_RGB2HSV)
-    # image_show('v[0]', vv[:,:,0])
-    # image_show('v[1]', vv[:,:,1])
-    # image_show('v[2]', vv[:,:,2])
+    image_show('v[0]', vv[:, :, 0])
+    image_show('v[1]', vv[:, :, 1])
+    image_show('v[2]', vv[:, :, 2])
     # cv2.waitKey(0)
+
+    ## Image de contenant des 0 et 1 / valeur seuil de la saturation ???
     vv = (vv[:, :, 1] > 32).astype(np.float32)
     vv = cv2.resize(vv, dsize=(width, height), interpolation=cv2.INTER_LINEAR)
 
     #####################
     # make coord
     #####################
-    xx = np.array_split(np.arange(half, width  - half),
-                        np.floor((width  - size) / step))
-    yy = np.array_split(np.arange(half, height - half),
-                        np.floor((height - size) / step))
-    # xx = [int(x.mean()) for x in xx]
-    # yy = [int(y.mean()) for y in yy]
+    xx = np.array_split(np.arange(half, width  - half), np.floor((width  - size) / step))
+    yy = np.array_split(np.arange(half, height - half), np.floor((height - size) / step))
     xx = [int(x[0]) for x in xx] + [width-half]
     yy = [int(y[0]) for y in yy] + [height-half]
 
-    print(f"min score to reject sub-images: {min_score}")
+    print(f"min saturation score to reject sub-images: {min_score}")
 
+    ################################################
+    ## On selectionne les sous-images en fonction
+    ## de la valeur moyenne de l'image de boolean
+    ## créée à partir du filtre de saturation
+    ################################################
     coord  = []
     reject = []
     for cy in yy:
@@ -73,18 +84,23 @@ def to_tile(image,
                 coord.append([cx, cy, cv])
             else:
                 reject.append([cx, cy, cv])
-    #-----
-    if 1:
-        tile_image = []
-        for cx, cy, cv in coord:
-            t = image_small[cy - half:cy + half, cx - half:cx + half]
-            assert (t.shape == (size, size, 3))
-            tile_image.append(t)
+
+    ###################################################
+    ## On recupère les tuiles (image + mask) à partir des
+    ## coordonnées choisies à l'étape précédente
+    ## et en faisant référence à l'image initiale
+    ## down-scalée du factor scale
+    ###################################################
+    tile_image = []
+    for cx, cy, cv in coord:
+        t = image_small[cy - half:cy + half, cx - half:cx + half]
+        assert (t.shape == (size, size, 3))
+        tile_image.append(t)
 
     if mask is not None:
         mask_small = cv2.resize(mask, dsize=None, fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
         tile_mask = []
-        for cx,cy,cv in coord:
+        for cx, cy, cv in coord:
             t = mask_small[cy - half:cy + half, cx - half:cx + half]
             assert (t.shape == (size, size))
             tile_mask.append(t)
