@@ -90,7 +90,9 @@ class HuDataset(Dataset):
             'mask' : mask,
             'image' : image,
         }
-        if self.augment is not None: r = self.augment(r)
+        if self.augment is not None:
+            r = self.augment(r)
+
         return r
 
 
@@ -307,24 +309,26 @@ def null_collate(batch):
 
 image_size = 256
 
-
 def train_augment(record):
+
+    verbose = record.get('verbose', False)
+
     image = record['image']
     mask = record['mask']
 
     for fn in np.random.choice([
-        lambda image, mask: do_random_rotate_crop(image, mask, size=image_size, mag=45, verbose=True),
-        lambda image, mask: do_random_scale_crop(image, mask, size=image_size, mag=0.075, verbose=True),
-        lambda image, mask: do_random_crop(image, mask, size=image_size, verbose=True),
+        lambda image, mask: do_random_rotate_crop(image, mask, size=image_size, mag=45, verbose=verbose),
+        lambda image, mask: do_random_scale_crop(image, mask, size=image_size, mag=0.075, verbose=verbose),
+        lambda image, mask: do_random_crop(image, mask, size=image_size, verbose=verbose),
     ], 1): image, mask = fn(image, mask)
 
     image, mask = do_random_hsv(image, mask, mag=[0.1, 0.2, 0])
     for fn in np.random.choice([
         lambda image, mask: (image, mask),
-        lambda image, mask: do_random_contast(image, mask, mag=0.5, verbose=True),
-        lambda image, mask: do_random_gain(image, mask, mag=0.9, verbose=True),
+        lambda image, mask: do_random_contast(image, mask, mag=0.5, verbose=verbose),
+        lambda image, mask: do_random_gain(image, mask, mag=0.9, verbose=verbose),
         # lambda image, mask : do_random_hsv(image, mask, mag=[0.1, 0.2, 0], verbose=True),
-        lambda image, mask: do_random_noise(image, mask, mag=0.03, verbose=True),
+        lambda image, mask: do_random_noise(image, mask, mag=0.03, verbose=verbose),
     ], 1): image, mask = fn(image, mask)
 
     image, mask = do_random_flip_transpose(image, mask)
@@ -366,7 +370,8 @@ def run_check_augment():
             print(70 * '-')
             image1, mask1 = train_augment({
                 'image': image.copy(),
-                'mask' : mask.copy()
+                'mask' : mask.copy(),
+                'verbose': True
             })
             # overlay1 = np.hstack([image1, np.tile(mask1.reshape(*image1.shape[:2], 1), (1, 1, 3)),])
             image_show_norm('overlay1', image1)

@@ -327,7 +327,7 @@ def run_train(show_valid_images=False,
 
         for t, batch in enumerate(train_loader):
 
-            if iteration % iter_valid == 0: # and iteration > 0:
+            if iteration % iter_valid == 0 and iteration > 0:
                 valid_loss = do_valid(net, valid_loader)
                 bookeeping.update(
                     iteration=iteration,
