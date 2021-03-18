@@ -89,21 +89,6 @@ def do_valid(net, valid_loader):
             valid_mask.append(mask.data.cpu().numpy())
             valid_num += batch_size
 
-            # debug
-            if 0:
-                pass
-                image = image.data.cpu().numpy()
-                mask = mask.data.cpu().numpy().squeeze(1)
-                probability = probability.data.cpu().numpy().squeeze(1)
-
-                for b in range(batch_size):
-                    m = image[b].transpose(1, 2, 0).copy()
-                    t = mask[b]
-                    p = probability[b]
-                    image_show_norm('valid m', m, min=0, max=1)
-                    image_show_norm('valid t', t, min=0, max=1)
-                    image_show_norm('valid p', p, min=0, max=1)
-                    cv2.waitKey(0)
 
             # ---
             print('\r %8d / %d  %s' % (valid_num, len(valid_loader.dataset), time_to_str(timer() - start_timer, 'sec')),
@@ -116,7 +101,9 @@ def do_valid(net, valid_loader):
     probability = np.concatenate(valid_probability)
     mask = np.concatenate(valid_mask)
 
+    # print('\n1', timer() - start_timer)
     loss = np_binary_cross_entropy_loss(probability, mask)
+    # print(timer() - start_timer)
 
     # print()
     # print(probability.shape)
@@ -127,7 +114,10 @@ def do_valid(net, valid_loader):
     #
     # loss = lovasz_loss(torch.logit(torch.from_numpy(probability)), mask)
 
+    # print('2', timer() - start_timer)
     dice = np_dice_score(probability, mask)
+
+    # print('3', timer() - start_timer)
     tp, tn = np_accuracy(probability, mask)
     return [dice, loss, tp, tn]
 
@@ -336,13 +326,15 @@ def run_train(show_valid_images=False,
 
         for t, batch in enumerate(train_loader):
 
-            if iteration % iter_valid == 0 and iteration > 0:
+            if iteration % iter_valid == 0: # and iteration > 0:
                 valid_loss = do_valid(net, valid_loader)
                 bookeeping.update(
                     iteration=iteration,
                     epoch=epoch,
                     score=valid_loss[0]
                 )
+
+                # sys.exit()
 
             if iteration % iter_log == 0 and iteration > 0:
                 print('\r', end='', flush=True)
@@ -539,7 +531,7 @@ if __name__ == '__main__':
             iter_save         = 250,
             first_iter_save   = 0,
             loss_type         = "weighted_bce",
-            tile_scale        = 0.5,
+            tile_scale        = 0.25,
             tile_size         = 320
         )
 

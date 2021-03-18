@@ -16,11 +16,15 @@ def np_binary_cross_entropy_loss(probability, mask):
     p = probability.reshape(-1)
     t = mask.reshape(-1)
 
+    # print("here")
     #---
     logp = -np.log(np.clip(p,1e-6,1))
     logn = -np.log(np.clip(1-p,1e-6,1))
     loss = t*logp +(1-t)*logn
     loss = loss.mean()
+
+    # print("end")
+
     return loss
 
 
