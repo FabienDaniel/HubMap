@@ -327,7 +327,7 @@ def train_augment(record):
     image, mask = do_random_hsv(image, mask, mag=[0.1, 0.2, 0])
     for fn in np.random.choice([
         lambda image, mask: (image, mask),
-        lambda image, mask: do_random_contast(image, mask, mag=0.8, verbose=verbose),
+        lambda image, mask: do_random_contast(image, mask, mag=1.0, verbose=verbose),
         lambda image, mask: do_random_gain(image, mask, mag=0.9, verbose=verbose),
         # lambda image, mask : do_random_hsv(image, mask, mag=[0.1, 0.2, 0], verbose=True),
         lambda image, mask: do_random_noise(image, mask, mag=0.1, verbose=verbose),
