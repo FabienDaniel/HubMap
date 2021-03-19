@@ -46,9 +46,9 @@ def to_tile(image,
     print(f"\tscaled image size = {vv.shape[0]} x {vv.shape[0]}")
 
     vv = cv2.cvtColor(vv, cv2.COLOR_RGB2HSV)
-    image_show('v[0]', vv[:, :, 0])
-    image_show('v[1]', vv[:, :, 1])
-    image_show('v[2]', vv[:, :, 2])
+    # image_show('v[0]', vv[:, :, 0])
+    # image_show('v[1]', vv[:, :, 1])
+    # image_show('v[2]', vv[:, :, 2])
     # cv2.waitKey(0)
 
     ## Image de contenant des 0 et 1 / valeur seuil de la saturation ???

@@ -50,7 +50,7 @@ def mask_to_csv(image_id, submit_dir):
     return df
 
 
-def submit(sha, server, iterations, fold):
+def submit(sha, server, iterations, fold, flip_predict):
 
     out_dir = project_repo + f"/result/Baseline/fold{'_'.join(map(str, fold))}"
     _checkpoint_dir = out_dir + f"/checkpoint_{sha}/"
@@ -62,12 +62,16 @@ def submit(sha, server, iterations, fold):
 
     initial_checkpoint = out_dir + f'/checkpoint_{sha}/{model_checkpoint}'
 
-    print(initial_checkpoint)
+    print("checkpoint:", initial_checkpoint)
 
     print(f"submit with server={server}")
 
     #---
-    submit_dir = out_dir + f'/predictions_{sha}/%s-%s-mean' % (server, iter_tag)
+    if flip_predict:
+        submit_dir = out_dir + f'/predictions_{sha}/%s-%s-mean' % (server, iter_tag)
+    else:
+        submit_dir = out_dir + f'/predictions_{sha}/%s-%s-noflip' % (server, iter_tag)
+
     os.makedirs(submit_dir, exist_ok=True)
 
     log = Logger()
@@ -86,8 +90,8 @@ def submit(sha, server, iterations, fold):
         valid_image_id = make_image_id('test-all')
 
 
-    tile_size = 640 #320
-    tile_average_step = 320 #192
+    tile_size = 640
+    tile_average_step = 320
     tile_scale = 0.25
     tile_min_score = 0.25
 
@@ -101,6 +105,7 @@ def submit(sha, server, iterations, fold):
     start_timer = timer()
     for id in valid_image_id:
         print(50*"=")
+
         if server == 'local':
             image_file = raw_data_dir + '/train/%s.tiff' % id
             image = read_tiff(image_file)
@@ -109,12 +114,8 @@ def submit(sha, server, iterations, fold):
             json_file  = raw_data_dir + '/train/%s-anatomical-structure.json' % id
             structure = draw_strcuture(read_json_as_df(json_file), height, width, structure=['Cortex'])
 
-            try:
-                mask_file = raw_data_dir + '/train/%s.corrected_shift_mask.png' % id
-                mask  = read_mask(mask_file)
-            except:
-                mask_file  = raw_data_dir + '/train/%s.mask.png' % id
-                mask  = read_mask(mask_file)
+            mask_file  = raw_data_dir + '/train/%s.mask.png' % id
+            mask  = read_mask(mask_file)
 
         if server == 'kaggle':
             image_file = raw_data_dir + '/test/%s.tiff' % id
@@ -126,19 +127,22 @@ def submit(sha, server, iterations, fold):
 
             mask = None
 
-
-        #--- predict here!  ---
-        # tile = to_tile(image, mask, structure, tile_scale, tile_size, tile_average_step, tile_min_score)
+        #######################################
+        # --- predict here!  ---
+        #######################################
         tile = to_tile(image, mask, tile_scale, tile_size, tile_average_step, tile_min_score)
-
 
         tile_image = tile['tile_image']
         tile_image = np.stack(tile_image)[..., ::-1]
         tile_image = np.ascontiguousarray(tile_image.transpose(0, 3, 1, 2))
-        tile_image = tile_image.astype(np.float32)/255
+        tile_image = tile_image.astype(np.float32)/255   # N_tiles x Colors x tile_x x tile_y
+
+        print(30 * '-')
+        print("tile matrix shape:", tile_image.shape)
 
         tile_probability = []
         batch = np.array_split(tile_image, len(tile_image)//4)
+
         for t, m in enumerate(batch):
             print('\r %s  %d / %d   %s' %
                   (id, t, len(batch), time_to_str(timer() - start_timer, 'sec')),
@@ -147,30 +151,39 @@ def submit(sha, server, iterations, fold):
 
             p = []
             with torch.no_grad():
+                # inference sur l'image de base
                 logit = data_parallel(net, m)
                 p.append(torch.sigmoid(logit))
 
-                #---
-                if 1: #tta here
-                    logit = data_parallel(net, m.flip(dims=(2,)))
-                    p.append(torch.sigmoid(logit.flip(dims=(2,))))
-
-                    logit = data_parallel(net, m.flip(dims=(3,)))
-                    p.append(torch.sigmoid(logit.flip(dims=(3,))))
-                #---
+                if flip_predict:          # inference sur les images inversées / axes x et y
+                    for _dim in [(2,), (3,), (2, 3)]:
+                        _logit = data_parallel(net, m.flip(dims=_dim))
+                        p.append(_logit.flip(dims=_dim))
 
             p = torch.stack(p).mean(0)
             tile_probability.append(p.data.cpu().numpy())
+
 
         print('\r' , end='', flush=True)
         log.write('%s  %d / %d   %s\n' %
                   (id, t, len(batch), time_to_str(timer() - start_timer, 'sec')))
 
-        tile_probability = np.concatenate(tile_probability).squeeze(1)
+        # before squeeze, dimension = N_tiles x 1 x tile_x x tile_y
+        tile_probability = np.concatenate(tile_probability).squeeze(1)   # N_tiles x tile_x x tile_y
         height, width = tile['image_small'].shape[:2]
-        probability = to_mask(tile_probability, tile['coord'], height, width,
-                              tile_scale, tile_size, tile_average_step, tile_min_score,
+        probability = to_mask(tile_probability,                          # height x width
+                              tile['coord'],
+                              height,
+                              width,
+                              tile_scale,
+                              tile_size,
+                              tile_average_step,
+                              tile_min_score,
                               aggregate='mean')
+
+        # -------------------------------------------------
+        # Saves the numpy array that contains probabilities
+        np.savez_compressed(submit_dir + f'/proba_{id}.npy', probability=probability)
 
         #--- show results ---
         if server == 'local':
@@ -180,32 +193,32 @@ def submit(sha, server, iterations, fold):
 
         overlay = np.dstack([
             np.zeros_like(truth),
-            probability, #green
-            truth, #red
+            probability,          # green
+            truth,                # red
         ])
         image_small = tile['image_small'].astype(np.float32)/255
         predict = (probability > 0.5).astype(np.float32)
         overlay1 = 1-(1-image_small)*(1-overlay)
+
         overlay2 = image_small.copy()
-        # overlay2 = draw_contour_overlay(overlay2, tile['structure_small'], color=(1, 1, 1), thickness=3)
         overlay2 = draw_contour_overlay(overlay2, truth, color=(0, 0, 1), thickness=8)
         overlay2 = draw_contour_overlay(overlay2, probability, color=(0, 1, 0), thickness=3)
 
 
         if 1:
-            image_show_norm('image_small', image_small, min=0, max=1, resize=0.1)
+            # image_show_norm('image_small', image_small, min=0, max=1, resize=0.1)
             image_show_norm('probability', probability, min=0, max=1, resize=0.1)
-            image_show_norm('predict',     predict, min=0, max=1, resize=0.1)
-            image_show_norm('overlay',     overlay,     min=0, max=1, resize=0.1)
+            image_show_norm('predict',     predict,     min=0, max=1, resize=0.1)
+            # image_show_norm('overlay',     overlay,     min=0, max=1, resize=0.1)
             image_show_norm('overlay1',    overlay1,    min=0, max=1, resize=0.1)
             image_show_norm('overlay2',    overlay2,    min=0, max=1, resize=0.1)
             cv2.waitKey(1)
 
         if 1:
-            cv2.imwrite(submit_dir + '/%s.image_small.png' % id, (image_small*255).astype(np.uint8))
+            # cv2.imwrite(submit_dir + '/%s.image_small.png' % id, (image_small*255).astype(np.uint8))
             cv2.imwrite(submit_dir + '/%s.probability.png' % id, (probability*255).astype(np.uint8))
             cv2.imwrite(submit_dir + '/%s.predict.png' % id, (predict*255).astype(np.uint8))
-            cv2.imwrite(submit_dir + '/%s.overlay.png' % id, (overlay*255).astype(np.uint8))
+            # cv2.imwrite(submit_dir + '/%s.overlay.png' % id, (overlay*255).astype(np.uint8))
             cv2.imwrite(submit_dir + '/%s.overlay1.png' % id, (overlay1*255).astype(np.uint8))
             cv2.imwrite(submit_dir + '/%s.overlay2.png' % id, (overlay2*255).astype(np.uint8))
 
@@ -284,6 +297,7 @@ if __name__ == '__main__':
     parser.add_argument("-i", "--Iterations", help="number of iterations")
     parser.add_argument("-s", "--Server", help="run mode: server or kaggle")
     parser.add_argument("-f", "--fold", help="fold")
+    parser.add_argument("-r", "--flip", help="flip image and merge", default=True)
 
     args = parser.parse_args()
 
@@ -330,6 +344,7 @@ if __name__ == '__main__':
     submit(model_sha,
            server=args.Server,
            iterations=args.Iterations,
-           fold=fold
+           fold=fold,
+           flip_predict=args.flip
            )
 

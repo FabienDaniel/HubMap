@@ -162,31 +162,33 @@ def to_mask(tile, coord, height, width, scale, size, step, min_score, aggregate=
     mask  = np.zeros((height, width), np.float32)
 
     if 'mean' in aggregate:
-        w = np.ones((size,size), np.float32)
+        w = np.ones((size, size), np.float32)
 
         #if 'sq' in aggregate:
         if 1:
             #https://stackoverflow.com/questions/17190649/how-to-obtain-a-gaussian-filter-in-python
-            y,x = np.mgrid[-half:half,-half:half]
-            y = half-abs(y)
-            x = half-abs(x)
-            w = np.minimum(x,y)
-            w = w/w.max()#*2.5
-            w = np.minimum(w,1)
+            y, x = np.mgrid[-half:half, -half:half]
+            y = half - abs(y)
+            x = half - abs(x)
+            w = np.minimum(x, y)
+            w = w / w.max()
+            w = np.minimum(w, 1)
 
         #--------------
         count = np.zeros((height, width), np.float32)
         for t, (cx, cy, cv) in enumerate(coord):
-            mask [cy - half:cy + half, cx - half:cx + half] += tile[t]*w
+            mask [cy - half:cy + half, cx - half:cx + half] += tile[t] * w
             count[cy - half:cy + half, cx - half:cx + half] += w
                # see unet paper for "Overlap-tile strategy for seamless segmentation of arbitrary large images"
         m = (count != 0)
         mask[m] /= count[m]
 
-    if aggregate=='max':
+    if aggregate == 'max':
         for t, (cx, cy, cv) in enumerate(coord):
             mask[cy - half:cy + half, cx - half:cx + half] = np.maximum(
-                mask[cy - half:cy + half, cx - half:cx + half], tile[t] )
+                mask[cy - half:cy + half, cx - half:cx + half],
+                tile[t]
+            )
 
     return mask
 

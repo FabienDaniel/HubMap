@@ -179,6 +179,8 @@ class Net(nn.Module):
 
     def forward(self, image):
         batch_size,C,H,W = image.shape
+        # print(batch_size, C, H, W)
+
         #x = self.rgb(image)
         x = image
 
