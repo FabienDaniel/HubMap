@@ -50,27 +50,34 @@ def mask_to_csv(image_id, submit_dir):
     return df
 
 
-def submit(sha, server, iterations, fold, flip_predict):
+def submit(sha, server, iterations, fold, flip_predict, checkpoint_sha):
 
     out_dir = project_repo + f"/result/Baseline/fold{'_'.join(map(str, fold))}"
-    _checkpoint_dir = out_dir + f"/checkpoint_{sha}/"
+    if checkpoint_sha is not None:
+        print("Checkpoint for current inference:", checkpoint_sha)
+        _sha = checkpoint_sha
+        _checkpoint_dir = out_dir + f"/checkpoint_{checkpoint_sha}/"
+    else:
+        _sha = sha
+        _checkpoint_dir = out_dir + f"/checkpoint_{sha}/"
 
     iter_tag = f"{int(iterations):08}"
 
     [model_checkpoint] = [_file for _file in os.listdir(_checkpoint_dir)
                           if iter_tag in _file.split('_')[0]]
 
-    initial_checkpoint = out_dir + f'/checkpoint_{sha}/{model_checkpoint}'
+    initial_checkpoint = out_dir + f'/checkpoint_{_sha}/{model_checkpoint}'
 
     print("checkpoint:", initial_checkpoint)
 
     print(f"submit with server={server}")
 
     #---
+    tag = ('', checkpoint_sha+'-')[checkpoint_sha is not None]
     if flip_predict:
-        submit_dir = out_dir + f'/predictions_{sha}/%s-%s-mean' % (server, iter_tag)
+        submit_dir = out_dir + f'/predictions_{sha}/%s-%s-%smean' % (server, iter_tag, tag)
     else:
-        submit_dir = out_dir + f'/predictions_{sha}/%s-%s-noflip' % (server, iter_tag)
+        submit_dir = out_dir + f'/predictions_{sha}/%s-%s-%snoflip' % (server, iter_tag, tag)
 
     os.makedirs(submit_dir, exist_ok=True)
 
@@ -298,6 +305,7 @@ if __name__ == '__main__':
     parser.add_argument("-s", "--Server", help="run mode: server or kaggle")
     parser.add_argument("-f", "--fold", help="fold")
     parser.add_argument("-r", "--flip", help="flip image and merge", default=True)
+    parser.add_argument("-c", "--CheckpointSha", help="checkpoint with weights", default=None)
 
     args = parser.parse_args()
 
@@ -335,16 +343,17 @@ if __name__ == '__main__':
     print(f"current commit: {model_sha}")
 
     changedFiles = [item.a_path for item in repo.index.diff(None) if item.a_path.endswith(".py")]
-    # if len(changedFiles) > 0:
-    #     print("ABORT submission -- There are unstaged files:")
-    #     for _file in changedFiles:
-    #         print(f" * {_file}")
-    #
-    # else:
-    submit(model_sha,
-           server=args.Server,
-           iterations=args.Iterations,
-           fold=fold,
-           flip_predict=args.flip
-           )
+    if len(changedFiles) > 0:
+        print("ABORT submission -- There are unstaged files:")
+        for _file in changedFiles:
+            print(f" * {_file}")
+
+    else:
+        submit(model_sha,
+               server=args.Server,
+               iterations=args.Iterations,
+               fold=fold,
+               flip_predict=args.flip,
+               checkpoint_sha=args.CheckpointSha
+               )
 
