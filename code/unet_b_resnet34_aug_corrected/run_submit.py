@@ -245,7 +245,7 @@ def submit(sha, server, iterations, fold, flip_predict, checkpoint_sha):
 
     #-----
     if server == 'kaggle':
-        csv_file = submit_dir + f'/submission_{sha}-%s-%s.csv' % (out_dir.split('/')[-1], iter_tag)
+        csv_file = submit_dir + f'/submission_{sha}-%s-%s%s.csv' % (out_dir.split('/')[-1], tag, iter_tag)
         df = mask_to_csv(valid_image_id, submit_dir)
         df.to_csv(csv_file, index=False)
         print(df)
@@ -342,18 +342,18 @@ if __name__ == '__main__':
     model_sha = repo.head.object.hexsha[:9]
     print(f"current commit: {model_sha}")
 
-    changedFiles = [item.a_path for item in repo.index.diff(None) if item.a_path.endswith(".py")]
-    if len(changedFiles) > 0:
-        print("ABORT submission -- There are unstaged files:")
-        for _file in changedFiles:
-            print(f" * {_file}")
-
-    else:
-        submit(model_sha,
-               server=args.Server,
-               iterations=args.Iterations,
-               fold=fold,
-               flip_predict=args.flip,
-               checkpoint_sha=args.CheckpointSha
-               )
+    # changedFiles = [item.a_path for item in repo.index.diff(None) if item.a_path.endswith(".py")]
+    # if len(changedFiles) > 0:
+    #     print("ABORT submission -- There are unstaged files:")
+    #     for _file in changedFiles:
+    #         print(f" * {_file}")
+    #
+    # else:
+    submit(model_sha,
+           server=args.Server,
+           iterations=args.Iterations,
+           fold=fold,
+           flip_predict=args.flip,
+           checkpoint_sha=args.CheckpointSha
+           )
 
