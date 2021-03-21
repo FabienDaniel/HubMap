@@ -53,6 +53,7 @@ def mask_to_csv(image_id, submit_dir):
 def mix(models, server, sha):
 
     submit_dir = project_repo + f"/result/mix_{sha}"
+    os.mkdir(submit_dir)
     print(f"submit with server={server}")
 
     if server == 'local':
