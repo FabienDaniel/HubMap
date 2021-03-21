@@ -73,7 +73,12 @@ def submit(sha, server, iterations, fold, flip_predict, checkpoint_sha):
     print(f"submit with server={server}")
 
     #---
-    tag = ('', checkpoint_sha+'-')[checkpoint_sha is not None]
+    # print(checkpoint_sha, checkpoint_sha is not None)
+    if checkpoint_sha is None:
+        tag = ''
+    else:
+        tag = checkpoint_sha + '-'
+
     if flip_predict:
         submit_dir = out_dir + f'/predictions_{sha}/%s-%s-%smean' % (server, iter_tag, tag)
     else:

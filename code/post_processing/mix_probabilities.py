@@ -52,7 +52,7 @@ def mask_to_csv(image_id, submit_dir):
 
 def mix(models, server, sha):
 
-    submit_dir = project_repo + f"/result/"
+    submit_dir = project_repo + f"/result/mix_{sha}"
     print(f"submit with server={server}")
 
     if server == 'local':
@@ -88,11 +88,13 @@ if __name__ == '__main__':
     parser.add_argument("-s", "--server", help="server")
     args = parser.parse_args()
 
-    directory = 'result/Baseline/fold0_3_7/predictions_3ad594c90/'
+    directory = 'result/Baseline/fold2_4_5/predictions_1a9083ac2/'
     models = [
-        directory + 'kaggle-00005000-54a6a8673-mean',
-        directory + 'kaggle-00006500-54a6a8673-mean',
-        directory + 'kaggle-00007000-54a6a8673-mean'
+        directory + 'kaggle-00005250-mean',
+        directory + 'kaggle-00005750-mean',
+        directory + 'kaggle-00006250-mean',
+        directory + 'kaggle-00007500-mean',
+        directory + 'kaggle-00007750-mean'
     ]
 
     if not args.server:
