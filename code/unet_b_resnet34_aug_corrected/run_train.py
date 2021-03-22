@@ -127,6 +127,30 @@ def do_valid(net, valid_loader):
 ### Train
 ###################################################################################
 
+def get_loss(loss_type, logit, mask):
+    if loss_type == 'bce':
+        loss = criterion_binary_cross_entropy(logit, mask)
+    elif loss_type == 'dice':
+        criterion = DiceLoss()
+        loss = criterion(logit, mask)
+    elif loss_type == 'dice_bce':
+        criterion = DiceBCELoss()
+        loss = criterion(logit, mask)
+    elif loss_type == 'focal':
+        criterion = FocalLoss()
+        loss = criterion(logit, mask)
+    elif loss_type == 'tversky':
+        criterion = TverskyLoss()
+        loss = criterion(logit, mask, alpha=1, beta=1)
+    elif loss_type == 'focal_tversky':
+        criterion = FocalTverskyLoss()
+        loss = criterion(logit, mask, alpha=1, beta=1, gamma=2)
+    elif loss_type == 'weighted_bce':
+        criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(2.0))
+        loss = criterion(logit, mask)
+    return loss
+
+
 def run_train(show_valid_images=False,
               sha='',
               fold=None,
@@ -361,64 +385,18 @@ def run_train(show_valid_images=False,
                 image = image.half()
                 with amp.autocast():
                     logit = data_parallel(net, image)
-
-                    if loss_type == 'bce':
-                        loss = criterion_binary_cross_entropy(logit, mask)
-                    elif loss_type == 'dice':
-                        criterion = DiceLoss()
-                        loss = criterion(logit, mask)
-                    elif loss_type == 'dice_bce':
-                        criterion = DiceBCELoss()
-                        loss = criterion(logit, mask)
-                    elif loss_type == 'focal':
-                        criterion = FocalLoss()
-                        loss = criterion(logit, mask)
-                    elif loss_type == 'tversky':
-                        criterion = TverskyLoss()
-                        loss = criterion(logit, mask, alpha=1, beta=1)
-                    elif loss_type == 'focal_tversky':
-                        criterion = FocalTverskyLoss()
-                        loss = criterion(logit, mask, alpha=1, beta=1, gamma=2)
-                    elif loss_type == 'weighted_bce':
-                        criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(2.0))
-                        loss = criterion(logit, mask)
+                    loss = get_loss(loss_type, logit, mask)
 
                 scaler.scale(loss).backward()
                 scaler.step(optimizer)
                 scaler.update()
-
             else:
-
                 # logit = data_parallel(net, image)
                 logit = net(image)
-                # loss = criterion_binary_cross_entropy(logit, mask)
-
-                # criterion = DiceLoss()
-                # loss = criterion(logit, mask)
-
-                if loss_type == 'bce':
-                    loss = criterion_binary_cross_entropy(logit, mask)
-                elif loss_type == 'dice':
-                    criterion = DiceLoss()
-                    loss = criterion(logit, mask)
-                elif loss_type == 'dice_bce':
-                    criterion = DiceBCELoss()
-                    loss = criterion(logit, mask)
-                elif loss_type == 'focal':
-                    criterion = FocalLoss()
-                    loss = criterion(logit, mask)
-                elif loss_type == 'tversky':
-                    criterion = TverskyLoss()
-                    loss = criterion(logit, mask, alpha=1, beta=1)
-                elif loss_type == 'focal_tversky':
-                    criterion = FocalTverskyLoss()
-                    loss = criterion(logit, mask, alpha=1, beta=1, gamma=2)
-                elif loss_type == 'weighted_bce':
-                    criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(2.0))
-                    loss = criterion(logit, mask)
-
+                loss = get_loss(loss_type, logit, mask)
                 loss.backward()
                 optimizer.step()
+                
             ##############################
             # print statistics  ----------
             ##############################
