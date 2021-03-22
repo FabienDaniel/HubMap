@@ -50,6 +50,71 @@ def mask_to_csv(image_id, submit_dir):
     return df
 
 
+def get_images(server, id):
+    if server == 'local':
+        _tag = 'train'
+    elif server == 'kaggle':
+        _tag = 'test'
+    image_file = raw_data_dir + f"/{_tag}/{id}.tiff"
+    json_file = raw_data_dir + f"/{_tag}/{id}-anatomical-structure.json"
+    image = read_tiff(image_file)
+
+    if server == 'local':
+        mask_file = raw_data_dir + f"/{_tag}/{id}.mask.png"
+        mask = read_mask(mask_file)
+    elif server == 'kaggle':
+        mask = None
+
+    return image, mask, json_file
+
+
+def get_probas(
+        id, net, tile_image, tile, flip_predict, start_timer, log,
+        tile_size, tile_average_step, tile_scale, tile_min_score
+):
+
+    tile_probability = []
+    batch = np.array_split(tile_image, len(tile_image) // 4)
+
+    for t, m in enumerate(batch):
+        print('\r %s  %d / %d   %s' %
+              (id, t, len(batch), time_to_str(timer() - start_timer, 'sec')),
+              end='', flush=True)
+        m = torch.from_numpy(m).cuda()
+
+        p = []
+        with torch.no_grad():
+            # inference sur l'image de base
+            logit = data_parallel(net, m)
+            p.append(torch.sigmoid(logit))
+
+            if flip_predict:  # inference sur les images inversées / axes x et y
+                for _dim in [(2,), (3,), (2, 3)]:
+                    _logit = data_parallel(net, m.flip(dims=_dim))
+                    p.append(_logit.flip(dims=_dim))
+
+        p = torch.stack(p).mean(0)
+        tile_probability.append(p.data.cpu().numpy())
+
+    print('\r', end='', flush=True)
+    log.write('%s  %d / %d   %s\n' %
+              (id, t, len(batch), time_to_str(timer() - start_timer, 'sec')))
+
+    # before squeeze, dimension = N_tiles x 1 x tile_x x tile_y
+    tile_probability = np.concatenate(tile_probability).squeeze(1)  # N_tiles x tile_x x tile_y
+    height, width = tile['image_small'].shape[:2]
+    probability = to_mask(tile_probability,  # height x width
+                          tile['coord'],
+                          height,
+                          width,
+                          tile_scale,
+                          tile_size,
+                          tile_average_step,
+                          tile_min_score,
+                          aggregate='mean')
+    return probability
+
+
 def submit(sha, server, iterations, fold, flip_predict, checkpoint_sha):
 
     out_dir = project_repo + f"/result/Baseline/fold{'_'.join(map(str, fold))}"
@@ -61,12 +126,16 @@ def submit(sha, server, iterations, fold, flip_predict, checkpoint_sha):
         _sha = sha
         _checkpoint_dir = out_dir + f"/checkpoint_{sha}/"
 
-    iter_tag = f"{int(iterations):08}"
-
-    [model_checkpoint] = [_file for _file in os.listdir(_checkpoint_dir)
-                          if iter_tag in _file.split('_')[0]]
-
-    initial_checkpoint = out_dir + f'/checkpoint_{_sha}/{model_checkpoint}'
+    if iterations == 'all':
+        iter_tag = 'all'
+        model_checkpoints = [_file for _file in os.listdir(_checkpoint_dir)]
+        initial_checkpoint = [out_dir + f'/checkpoint_{_sha}/{model_checkpoint}'
+                              for model_checkpoint in model_checkpoints]
+    else:
+        iter_tag = f"{int(iterations):08}"
+        [model_checkpoint] = [_file for _file in os.listdir(_checkpoint_dir)
+                              if iter_tag in _file.split('_')[0]]
+        initial_checkpoint = [out_dir + f'/checkpoint_{_sha}/{model_checkpoint}']
 
     print("checkpoint:", initial_checkpoint)
 
@@ -79,7 +148,9 @@ def submit(sha, server, iterations, fold, flip_predict, checkpoint_sha):
     else:
         tag = checkpoint_sha + '-'
 
-    if flip_predict:
+    if iterations == 'all':
+        submit_dir = out_dir + f'/predictions_{sha}/%s-%s-%smean' % (server, 'all', tag)
+    elif flip_predict:
         submit_dir = out_dir + f'/predictions_{sha}/%s-%s-%smean' % (server, iter_tag, tag)
     else:
         submit_dir = out_dir + f'/predictions_{sha}/%s-%s-%snoflip' % (server, iter_tag, tag)
@@ -89,11 +160,6 @@ def submit(sha, server, iterations, fold, flip_predict, checkpoint_sha):
     log = Logger()
     log.open(out_dir + f'/log.submit_{sha}.txt', mode='a')
     log.write('\n--- [START %s] %s\n\n' % (IDENTIFIER, '-' * 64))
-
-    net = Net().cuda()
-    state_dict = torch.load(initial_checkpoint, map_location=lambda storage, loc: storage)['state_dict']
-    net.load_state_dict(state_dict, strict=True)
-    net = net.eval()
 
     #---
     if server == 'local':
@@ -118,26 +184,9 @@ def submit(sha, server, iterations, fold, flip_predict, checkpoint_sha):
     for id in valid_image_id:
         print(50*"=")
 
-        if server == 'local':
-            image_file = raw_data_dir + '/train/%s.tiff' % id
-            image = read_tiff(image_file)
-            height, width = image.shape[:2]
-
-            json_file  = raw_data_dir + '/train/%s-anatomical-structure.json' % id
-            structure = draw_strcuture(read_json_as_df(json_file), height, width, structure=['Cortex'])
-
-            mask_file  = raw_data_dir + '/train/%s.mask.png' % id
-            mask  = read_mask(mask_file)
-
-        if server == 'kaggle':
-            image_file = raw_data_dir + '/test/%s.tiff' % id
-            json_file  = raw_data_dir + '/test/%s-anatomical-structure.json' % id
-
-            image = read_tiff(image_file)
-            height, width = image.shape[:2]
-            structure = draw_strcuture(read_json_as_df(json_file), height, width, structure=['Cortex'])
-
-            mask = None
+        image, mask, json_file = get_images(server, id)
+        height, width = image.shape[:2]
+        # structure = draw_strcuture(read_json_as_df(json_file), height, width, structure=['Cortex'])
 
         #######################################
         # --- predict here!  ---
@@ -152,46 +201,27 @@ def submit(sha, server, iterations, fold, flip_predict, checkpoint_sha):
         print(30 * '-')
         print("tile matrix shape:", tile_image.shape)
 
-        tile_probability = []
-        batch = np.array_split(tile_image, len(tile_image)//4)
 
-        for t, m in enumerate(batch):
-            print('\r %s  %d / %d   %s' %
-                  (id, t, len(batch), time_to_str(timer() - start_timer, 'sec')),
-                  end='', flush=True)
-            m = torch.from_numpy(m).cuda()
-
-            p = []
-            with torch.no_grad():
-                # inference sur l'image de base
-                logit = data_parallel(net, m)
-                p.append(torch.sigmoid(logit))
-
-                if flip_predict:          # inference sur les images inversées / axes x et y
-                    for _dim in [(2,), (3,), (2, 3)]:
-                        _logit = data_parallel(net, m.flip(dims=_dim))
-                        p.append(_logit.flip(dims=_dim))
-
-            p = torch.stack(p).mean(0)
-            tile_probability.append(p.data.cpu().numpy())
-
-
-        print('\r' , end='', flush=True)
-        log.write('%s  %d / %d   %s\n' %
-                  (id, t, len(batch), time_to_str(timer() - start_timer, 'sec')))
-
-        # before squeeze, dimension = N_tiles x 1 x tile_x x tile_y
-        tile_probability = np.concatenate(tile_probability).squeeze(1)   # N_tiles x tile_x x tile_y
         height, width = tile['image_small'].shape[:2]
-        probability = to_mask(tile_probability,                          # height x width
-                              tile['coord'],
-                              height,
-                              width,
-                              tile_scale,
-                              tile_size,
-                              tile_average_step,
-                              tile_min_score,
-                              aggregate='mean')
+
+        individual_probabilities = []
+        for _checkpoint in initial_checkpoint:
+
+            print("processing checkpoint:", _checkpoint)
+
+            net = Net().cuda()
+            state_dict = torch.load(_checkpoint, map_location=lambda storage, loc: storage)['state_dict']
+            net.load_state_dict(state_dict, strict=True)
+            net = net.eval()
+
+            _proba = get_probas(
+                id, net, tile_image, tile, flip_predict, start_timer, log,
+                tile_size, tile_average_step, tile_scale, tile_min_score
+            )
+            individual_probabilities.append(_proba)
+
+        probability = np.mean(individual_probabilities, axis=0)
+
 
         # -------------------------------------------------
         # Saves the numpy array that contains probabilities
@@ -347,18 +377,18 @@ if __name__ == '__main__':
     model_sha = repo.head.object.hexsha[:9]
     print(f"current commit: {model_sha}")
 
-    # changedFiles = [item.a_path for item in repo.index.diff(None) if item.a_path.endswith(".py")]
-    # if len(changedFiles) > 0:
-    #     print("ABORT submission -- There are unstaged files:")
-    #     for _file in changedFiles:
-    #         print(f" * {_file}")
-    #
-    # else:
-    submit(model_sha,
-           server=args.Server,
-           iterations=args.Iterations,
-           fold=fold,
-           flip_predict=args.flip,
-           checkpoint_sha=args.CheckpointSha
-           )
+    changedFiles = [item.a_path for item in repo.index.diff(None) if item.a_path.endswith(".py")]
+    if len(changedFiles) > 0:
+        print("ABORT submission -- There are unstaged files:")
+        for _file in changedFiles:
+            print(f" * {_file}")
+
+    else:
+        submit(model_sha,
+               server=args.Server,
+               iterations=args.Iterations,
+               fold=fold,
+               flip_predict=args.flip,
+               checkpoint_sha=args.CheckpointSha
+               )
 

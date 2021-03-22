@@ -146,7 +146,7 @@ def get_loss(loss_type, logit, mask):
         criterion = FocalTverskyLoss()
         loss = criterion(logit, mask, alpha=1, beta=1, gamma=2)
     elif loss_type == 'weighted_bce':
-        criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(2.0))
+        criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(1.5))
         loss = criterion(logit, mask)
     return loss
 
@@ -396,7 +396,7 @@ def run_train(show_valid_images=False,
                 loss = get_loss(loss_type, logit, mask)
                 loss.backward()
                 optimizer.step()
-                
+
             ##############################
             # print statistics  ----------
             ##############################
