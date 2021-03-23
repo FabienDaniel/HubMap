@@ -89,13 +89,13 @@ if __name__ == '__main__':
     parser.add_argument("-s", "--server", help="server")
     args = parser.parse_args()
 
-    directory = 'result/Baseline/fold2_4_5/predictions_1a9083ac2/'
+    directory = 'result/Baseline/'
     models = [
-        directory + 'kaggle-00005250-mean',
-        directory + 'kaggle-00005750-mean',
-        directory + 'kaggle-00006250-mean',
-        directory + 'kaggle-00007500-mean',
-        directory + 'kaggle-00007750-mean'
+        directory + 'fold6_9_10/predictions_e9b0864a1/kaggle-all-mean',
+        directory + 'fold11_12_13/predictions_e9b0864a1/kaggle-all-mean',
+        directory + 'fold1_8_14/predictions_49f6465ea/kaggle-all-aa1b0bff3-mean',
+        directory + 'fold2_4_5/predictions_1a9083ac2/kaggle-00005750-mean',
+        directory + 'fold0_3_7/predictions_3ad594c90/kaggle-00007000-54a6a8673-mean'
     ]
 
     if not args.server:
