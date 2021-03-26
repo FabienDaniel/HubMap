@@ -24,16 +24,19 @@ def do_random_flip_transpose(image, mask):
 
 #geometric
 def do_random_crop(image, mask, size, verbose=False):
-    height, width = image.shape[:2]
-    x = np.random.choice(width -size)
-    y = np.random.choice(height-size)
-    image = image[y:y+size, x:x+size]
-    mask  =  mask[y:y+size, x:x+size]
+    try:
+        height, width = image.shape[:2]
+        x = np.random.choice(width  - size)
+        y = np.random.choice(height - size)
+        image = image[y:y+size, x:x+size]
+        mask  =  mask[y:y+size, x:x+size]
 
-    if verbose:
-        print(f"random crop: image size: {height} x {width} -> {size} x {size}")
+        if verbose:
+            print(f"random crop: image size: {height} x {width} -> {size} x {size}")
 
-    return image, mask
+        return image, mask
+    except:
+        return image, mask
 
 
 def do_random_scale_crop(image, mask, size, mag, verbose=False):
