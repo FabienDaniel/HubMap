@@ -476,7 +476,7 @@ if __name__ == '__main__':
             sha               = model_sha,
             fold              = fold,
             start_lr          = 0.001,
-            batch_size        = 32,
+            batch_size        = 24,
             num_iteration     = int(args.iterations),
             iter_log          = 250,
             iter_save         = 250,

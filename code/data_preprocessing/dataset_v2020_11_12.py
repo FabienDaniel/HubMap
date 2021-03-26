@@ -399,7 +399,7 @@ def null_collate(batch):
 #         #exit(0)
 
 
-image_size = 256
+image_size = 320  # 256
 
 def train_augment(record):
 
