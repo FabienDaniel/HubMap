@@ -208,14 +208,15 @@ def mask_to_inner_contour(mask):
     return contour
 
 
-def draw_contour_overlay(image, mask, color=(0,0,255), thickness=1):
+def draw_contour_overlay(image, mask, color=(0, 0, 255), thickness=1):
     contour =  mask_to_inner_contour(mask)
-    if thickness==1:
+    print(contour.shape)
+    if thickness == 1:
         image[contour] = color
     else:
-        r = max(1,thickness//2)
-        for y,x in np.stack(np.where(contour)).T:
-            cv2.circle(image, (x,y), r, color, lineType=cv2.LINE_4 )
+        r = max(1, thickness//2)
+        for y, x in np.stack(np.where(contour)).T:
+            cv2.circle(image, (x, y), r, color, lineType=cv2.LINE_4)
     return image
 
 #-- tools ---
