@@ -45,11 +45,14 @@ def extract_centroids_from_predictions(
 ):
 
     df_train = pd.read_csv(raw_data_dir + '/train.csv')
+    image_size = tile_size
 
     os.makedirs(train_tile_dir, exist_ok=True)
     for i in range(0, len(df_train)):
 
         id, encoding = df_train.iloc[i]
+
+        # if id != 'c68fe75ea': continue
 
         real_mask_centroids = pd.read_csv(project_repo + f'/data/tile/' + f"/centroids_{id}.csv", index_col=0)
 
@@ -100,18 +103,42 @@ def extract_centroids_from_predictions(
             cv2.circle(image_copy, (cX, cY), 7, (255, 255, 255), -1)
             cv2.putText(image_copy, f"x={cX}, y={cY} ", (cX - 20, cY - 20),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
-            centroid_list.append([cX, cY])
+
+            # ---------------------------------------
+            # check how close from image boundaries
+            # ---------------------------------------
+            if cX - image_size // 2 < 0:
+                x0 = image_size // 2
+            elif cX + image_size // 2 > image_copy.shape[1]:
+                x0 = image_copy.shape[1] - image_size // 2
+            else:
+                x0 = cX
+
+            if cY - image_size // 2 < 0:
+                y0 = image_size // 2
+            elif cY + image_size // 2 > image_copy.shape[0]:
+                y0 = image_copy.shape[0] - image_size // 2
+            else:
+                y0 = cY
+
+            centroid_list.append([x0, y0])
 
         # -------------------------
         # visualisation loop
         # -------------------------
-        image_size = tile_size
+
         for cX, cY in centroid_list:
             resize = 1
             sub_image = image_copy[
                         cY - image_size//2: cY + image_size//2,
                         cX - image_size//2: cX + image_size//2,
                         :]
+
+            if sub_image.shape[0] != sub_image.shape[1]:
+                print(cX, cY, sub_image.shape, image_copy.shape)
+                sys.exit(1)
+
+
             cv2.namedWindow("sub_Image", cv2.WINDOW_GUI_NORMAL)
             cv2.imshow("sub_Image", sub_image)
             cv2.resizeWindow('sub_Image', round(resize * image_size), round(resize * image_size))
@@ -130,6 +157,8 @@ def extract_centroids_from_predictions(
             sub_mask = original_mask[
                        cY - image_size // 2: cY + image_size // 2,
                        cX - image_size // 2: cX + image_size // 2]
+
+            # print(cX, cY, sub_image.shape)
 
             s = 'y%08d_x%08d' % (cY, cX)
             cv2.imwrite(train_tile_dir + '/%s/%s.png' % (id, s), sub_image)

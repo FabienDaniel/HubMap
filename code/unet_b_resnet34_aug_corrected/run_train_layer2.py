@@ -190,7 +190,7 @@ def run_train(show_valid_images=False,
         sampler=SequentialSampler(valid_dataset),
         batch_size=8,
         drop_last=False,
-        num_workers=4,
+        num_workers=8,
         pin_memory=True,
         collate_fn=null_collate
     )

@@ -1,4 +1,5 @@
 import random
+import sys
 
 import numpy as np
 import cv2
@@ -24,19 +25,23 @@ def do_random_flip_transpose(image, mask):
 
 #geometric
 def do_random_crop(image, mask, size, verbose=False):
-    try:
-        height, width = image.shape[:2]
-        x = np.random.choice(width  - size)
-        y = np.random.choice(height - size)
-        image = image[y:y+size, x:x+size]
-        mask  =  mask[y:y+size, x:x+size]
+    height, width = image.shape[:2]
 
-        if verbose:
-            print(f"random crop: image size: {height} x {width} -> {size} x {size}")
+    # if height != width:
+    #     print(f"Width={width} and weight={height} must match")
+    #     sys.exit()
 
-        return image, mask
-    except:
-        return image, mask
+    x = np.random.choice(width  - size)
+    y = np.random.choice(height - size)
+
+
+    image = image[y:y+size, x:x+size]
+    mask  =  mask[y:y+size, x:x+size]
+    if verbose:
+        print(f"random crop: image size: {height} x {width} -> {size} x {size}")
+
+    return image, mask
+
 
 
 def do_random_scale_crop(image, mask, size, mag, verbose=False):
