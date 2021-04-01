@@ -210,7 +210,6 @@ def mask_to_inner_contour(mask):
 
 def draw_contour_overlay(image, mask, color=(0, 0, 255), thickness=1):
     contour =  mask_to_inner_contour(mask)
-    print(contour.shape)
     if thickness == 1:
         image[contour] = color
     else:
