@@ -158,8 +158,12 @@ def rle_encode(mask):
 
 def to_mask(tile, coord, height, width, scale, size, step, min_score, aggregate='mean'):
 
-    half = size//2
+    half = size // 2
     mask  = np.zeros((height, width), np.float32)
+
+    # print(sys.getsizeof(tile) * 1e-6, 'Mb')
+
+    print('Creating mask from tiles')
 
     if 'mean' in aggregate:
         w = np.ones((size, size), np.float32)
@@ -179,9 +183,32 @@ def to_mask(tile, coord, height, width, scale, size, step, min_score, aggregate=
         for t, (cx, cy, cv) in enumerate(coord):
             mask [cy - half:cy + half, cx - half:cx + half] += tile[t] * w
             count[cy - half:cy + half, cx - half:cx + half] += w
-               # see unet paper for "Overlap-tile strategy for seamless segmentation of arbitrary large images"
-        m = (count != 0)
-        mask[m] /= count[m]
+
+            print(f"{t} / {len(coord)}", sys.getsizeof(mask) * 1e-6, 'Mb', sys.getsizeof(mask) * 1e-6, 'Mb', end='\r')
+
+
+            # see unet paper for "Overlap-tile strategy for seamless segmentation of arbitrary large images"
+
+        # m = (count != 0)
+        # mask[m] /= count[m]
+
+        print(sys.getsizeof(mask) * 1e-6, 'Mb', sys.getsizeof(count) * 1e-6, 'Mb')
+
+
+        length = 100
+        for i in range(mask.shape[0] // length + 1):
+            i1 = i * length
+            i2 = min((i+1) * length, mask.shape[0])
+            # print(i1, i2)
+            mask[i1:i2] = np.divide(
+                mask[i1:i2],
+                count[i1:i2],
+                out=np.zeros_like(mask[i1:i2]),
+                where=count[i1:i2] != 0
+            )
+
+            # print(i1, i2, sys.getsizeof(mask) * 1e-6, 'Mb', sys.getsizeof(count) * 1e-6, 'Mb')
+
 
     if aggregate == 'max':
         for t, (cx, cy, cv) in enumerate(coord):

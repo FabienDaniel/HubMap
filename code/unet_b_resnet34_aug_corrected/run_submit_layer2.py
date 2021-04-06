@@ -1,10 +1,16 @@
+#  python -m code.unet_b_resnet34_aug_corrected.run_submit_layer2 -f "6 9 10" -i all -s local
+#  -l 'result/Baseline/fold1_8_14/predictions_4707bcbcf/local-00007500_model-mean'
+
 import argparse
 import os
 import sys
 
 import imutils
+import rasterio
 import torch
 from torch.nn.parallel.data_parallel import data_parallel
+
+from rasterio.windows import Window
 
 from code.data_preprocessing.dataset import read_tiff, to_tile
 from code.data_preprocessing.dataset_v2020_11_12 import make_image_id, draw_strcuture, read_json_as_df, read_mask, \
@@ -12,7 +18,8 @@ from code.data_preprocessing.dataset_v2020_11_12 import make_image_id, draw_strc
 from code.hubmap_v2 import data_dir, rle_encode, project_repo, raw_data_dir
 from code.lib.include import IDENTIFIER
 from code.lib.utility.file import Logger, time_to_str
-from code.unet_b_resnet34_aug_corrected.model import Net, np_binary_cross_entropy_loss, np_dice_score, np_accuracy
+from code.unet_b_resnet34_aug_corrected.model import Net, \
+    np_binary_cross_entropy_loss_optimized, np_dice_score_optimized, np_accuracy_optimized, np_dice_score
 from timeit import default_timer as timer
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
@@ -98,6 +105,7 @@ def get_probas(id, net, tile_image, tile_centroids, tile, flip_predict, start_ti
                     p.append(_logit.flip(dims=_dim))
 
         p = torch.stack(p).mean(0)
+        #
         # a = m.data.cpu().numpy()
         # b = p.data.cpu().numpy()
 
@@ -105,6 +113,10 @@ def get_probas(id, net, tile_image, tile_centroids, tile, flip_predict, start_ti
         #     print(f'image n°{i}', end='\r')
         #     base  = a[i, :, :, :]
         #     layer = b[i, :, :, :]
+        #
+        #     print(base)
+        #
+        #     print(layer)
         #
         #     base = np.ascontiguousarray(base.transpose(1, 2, 0)).astype(np.float32)
         #     layer = layer.squeeze(0).astype(np.float32)
@@ -122,7 +134,7 @@ def get_probas(id, net, tile_image, tile_centroids, tile, flip_predict, start_ti
         #
         #     cv2.imwrite(submit_dir + f'/{id}/y{y0}_x{x0}.png', (overlay2 * 255).astype(np.uint8))
         #
-        #     cv2.waitKey(1)
+        #     cv2.waitKey(0)
 
 
         tile_probability.append(p.data.cpu().numpy())
@@ -157,7 +169,8 @@ def layer2_tiling(image,
                   server=None
                   ):
 
-    image_small, tile_images, tile_mask, centroids = extract_tiles_from_predictions(image, size, layer1_path, server)
+    image_small, tile_images, tile_mask, centroids, height, width = \
+        extract_tiles_from_predictions(image, size, layer1_path, server)
 
     return {
         'image_small': image,
@@ -166,33 +179,164 @@ def layer2_tiling(image,
         'tile_mask': tile_mask,
         'coord': centroids,
         'reject': None,
-        'height': image_small.shape[0],
-        'width':  image_small.shape[1],
+        'height': height,
+        'width':  width,
     }
 
 
-def extract_tiles_from_predictions(id, tile_size, layer1_path, server):
-    image_size = tile_size
+# class HuBMAPDataset:
+#     def __init__(self, image_path, sz=256, saturation_threshold=40):
+#
+#         self.s_th = saturation_threshold   # saturation blancking threshold
+#         self.p_th = 1000 * (sz // 256) ** 2  # threshold for the minimum number of pixels
+#         identity = rasterio.Affine(1, 0, 0, 0, 1, 0)
+#
+#         self.data = rasterio.open(
+#             os.path.join(image_path),
+#             transform=identity,
+#             num_threads='all_cpus'
+#         )
+#         # some images have issues with their format
+#         # and must be saved correctly before reading with rasterio
+#         if self.data.count != 3:
+#             subdatasets = self.data.subdatasets
+#             self.layers = []
+#             if len(subdatasets) > 0:
+#                 for i, subdataset in enumerate(subdatasets, 0):
+#                     self.layers.append(rasterio.open(subdataset))
+#         self.shape = self.data.shape
+#
+#         self.width  = self.shape[0]
+#         self.height = self.shape[1]
+#
+#         self.reduce = 1
+#         self.sz = sz
+#         # self.n0max = self.shape[0] // self.sz
+#         # self.n1max = self.shape[1] // self.sz
+#
+#         print(f"image loader for {image_path} created")
+#
+#     def __len__(self):
+#         return self.n0max * self.n1max
+#
+#     def __getitem__(self, pos):
+#         x0, y0 = pos
+#         # make sure that the region to read is within the image
+#
+#         p00, p01 = max(0, x0), min(x0 + self.sz, self.width)
+#         p10, p11 = max(0, y0), min(y0 + self.sz, self.height)
+#         img = np.zeros((self.sz, self.sz, 3), np.uint8)
+#         # mapping the load region to the tile
+#         if self.data.count == 3:
+#             img[(p00 - x0):(p01 - x0), (p10 - y0):(p11 - y0)] = np.moveaxis(
+#                 self.data.read([1, 2, 3], window = Window.from_slices((p00, p01), (p10, p11))), 0, -1)
+#         else:
+#             for i, layer in enumerate(self.layers):
+#                 img[(p00 - x0):(p01 - x0), (p10 - y0):(p11 - y0), i] = \
+#                     layer.read(1, window=Window.from_slices((p00, p01), (p10, p11)))
+#
+#         if self.reduce != 1:
+#             img = cv2.resize(img, (self.sz // self.reduce, self.sz // self.reduce),
+#                              interpolation=cv2.INTER_AREA)
+#         # check for empty images
+#         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+#         h, s, v = cv2.split(hsv)
+#
+#         norm = 1
+#         if (s > self.s_th).sum() <= self.p_th or img.sum() <= self.p_th:
+#             return img / norm, -1
+#         else:
+#             return img / norm, +1
 
-    print(50*'-')
-    print(f"processing image: {id}")
+class HuBMAPDataset:
+    def __init__(self, image_path, sz=256, saturation_threshold=40):
 
-    if server == 'local':
-        image_file = raw_data_dir + '/train/%s.tiff' % id
-        mask_file = raw_data_dir + '/train/%s.mask.png' % id
-        original_mask = read_mask(mask_file)
+        self.s_th = saturation_threshold   # saturation blancking threshold
+        self.p_th = 1000 * (sz // 256) ** 2  # threshold for the minimum number of pixels
+        identity = rasterio.Affine(1, 0, 0, 0, 1, 0)
 
-    elif server == 'kaggle':
-        image_file = raw_data_dir + '/test/%s.tiff' % id
+        self.data = rasterio.open(
+            os.path.join(image_path),
+            transform=identity,
+            num_threads='all_cpus'
+        )
+        # some images have issues with their format
+        # and must be saved correctly before reading with rasterio
+        if self.data.count != 3:
+            subdatasets = self.data.subdatasets
+            self.layers = []
+            if len(subdatasets) > 0:
+                for i, subdataset in enumerate(subdatasets, 0):
+                    self.layers.append(rasterio.open(subdataset))
+        self.shape = self.data.shape
 
-    image = read_tiff(image_file)
+        self.width  = self.shape[1]
+        self.height = self.shape[0]
 
-    height, width = image.shape[:2]
-    print(f"image size: {height} x {width}")
+        self.reduce = 1
+        self.sz = sz
 
-    predict = np.array(PIL.Image.open(layer1_path + f'/{id}.predict.png'))
+        print(f"image loader for {image_path} created")
+        print(f"image size = {self.width} x {self.height}")
+
+    # def __len__(self):
+    #     return self.n0max * self.n1max
+
+    def __getitem__(self, pos):
+        x0, y0 = pos
+        # make sure that the region to read is within the image
+
+        p10, p11 = max(0, x0), min(x0 + self.sz, self.width)
+        p00, p01 = max(0, y0), min(y0 + self.sz, self.height)
+        img = np.zeros((self.sz, self.sz, 3), np.uint8)
+
+        # print(self.data.count, pos, (p00 + p01) / 2, (p10 + p11) / 2)
+
+        # mapping the load region to the tile
+        if self.data.count == 3:
+            img[(p00 - y0):(p01 - y0), (p10 - x0):(p11 - x0)] = np.moveaxis(
+                self.data.read([1, 2, 3], window = Window.from_slices((p00, p01), (p10, p11))), 0, -1)
+        else:
+            for i, layer in enumerate(self.layers):
+                img[(p00 - y0):(p01 - y0), (p10 - x0):(p11 - x0), i] = \
+                    layer.read(1, window=Window.from_slices((p00, p01), (p10, p11)))
+
+        if self.reduce != 1:
+            img = cv2.resize(img, (self.sz // self.reduce, self.sz // self.reduce),
+                             interpolation=cv2.INTER_AREA)
+
+        # print('x, y = ', x0, y0)
+        # image_show_norm('overlay2',
+        #                 img / 255,
+        #                 min=0, max=1, resize=0.5)
+        # cv2.waitKey(0)
+
+        # sys.exit()
+
+        # check for empty images
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        h, s, v = cv2.split(hsv)
+
+        norm = 1
+        if (s > self.s_th).sum() <= self.p_th or img.sum() <= self.p_th:
+            return img / norm, -1
+        else:
+            return img / norm, +1
+
+
+def _get_centroids(layer1_path, image_id, width, height, image_size):
+    # --------------------------------------------------------------
+    # Lecture des prédictions de la layer 1
+    # --------------------------------------------------------------
+    predict = np.array(PIL.Image.open(layer1_path + f'/{image_id}.predict.png'))
     mask = cv2.resize(predict, dsize=(width, height), interpolation=cv2.INTER_LINEAR)
+    print(width, height)
+    print(predict.shape[1] * 4, predict.shape[0] * 4)
+    # sys.exit()
 
+    # ----------------------------------------------------------------------
+    # calcul des contours des glomeruli / aux prédictions de la layer 1
+    # ----------------------------------------------------------------------
     cnts = cv2.findContours(mask.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     cnts = imutils.grab_contours(cnts)
 
@@ -201,62 +345,68 @@ def extract_tiles_from_predictions(id, tile_size, layer1_path, server):
     # -----------------------------------------
     centroid_list = []
     for c in cnts:
+        # ---------------------------------------
         # compute the center of the contour
+        # ---------------------------------------
         M = cv2.moments(c)
         cX = int(M["m10"] / M["m00"])
         cY = int(M["m01"] / M["m00"])
-
-        # draw the contour and center of the shape on the image
-        # cv2.drawContours(image, [c], -1, (0, 255, 0), 2)
-        # cv2.circle(image, (cX, cY), 7, (255, 255, 255), -1)
-        # cv2.putText(image, f"x={cX}, y={cY} ", (cX - 20, cY - 20),
-        #             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
 
         # ---------------------------------------
         # check how close from image boundaries
         # ---------------------------------------
         if cX - image_size // 2 < 0:
             x0 = image_size // 2
-        elif cX + image_size // 2 > image.shape[1]:
-            x0 = image.shape[1] - image_size // 2
+        elif cX + image_size // 2 > width:
+            x0 = width - image_size // 2
         else:
             x0 = cX
 
         if cY - image_size // 2 < 0:
             y0 = image_size // 2
-        elif cY + image_size // 2 > image.shape[0]:
-            y0 = image.shape[0] - image_size // 2
+        elif cY + image_size // 2 > height:
+            y0 = height - image_size // 2
         else:
             y0 = cY
 
         centroid_list.append([x0, y0])
 
-    # -------------------------
-    # visualisation loop
-    # -------------------------
-    for cX, cY in centroid_list:
-        resize = 1
-        sub_image = image[
-                    cY - image_size//2: cY + image_size//2,
-                    cX - image_size//2: cX + image_size//2,
-                    :]
+    return centroid_list
 
-        if server == 'local':
 
-            # print(original_mask.shape)
+def extract_tiles_from_predictions(id, tile_size, layer1_path, server):
+    image_size = tile_size
 
-            sub_mask = original_mask[
-                        cY - image_size // 2: cY + image_size // 2,
-                        cX - image_size // 2: cX + image_size // 2]
+    print(50*'-')
+    print(f"processing image: {id}")
 
-        if sub_image.shape[0] != sub_image.shape[1]:
-            print(cX, cY, sub_image.shape, image.shape)
-            sys.exit(1)
+    # --------------------------------------------------------------
+    # Chargement du .tiff (et du masque en local)
+    # --------------------------------------------------------------
+    # if server == 'local':
+    #     image_file = raw_data_dir + '/train/%s.tiff' % id
+    #     mask_file = raw_data_dir + '/train/%s.mask.png' % id
+    #     original_mask = read_mask(mask_file)
+    # elif server == 'kaggle':
+    #     image_file = raw_data_dir + '/test/%s.tiff' % id
+    # image = read_tiff(image_file)
 
-        # cv2.namedWindow("sub_Image", cv2.WINDOW_GUI_NORMAL)
-        # cv2.imshow("sub_Image", sub_image)
-        # cv2.resizeWindow('sub_Image', round(resize * image_size), round(resize * image_size))
-        # cv2.waitKey(1)
+    if server == 'local':
+        image_loader = HuBMAPDataset(raw_data_dir + '/train/%s.tiff' % id, sz=tile_size)
+        mask_file = raw_data_dir + '/train/%s.mask.png' % id
+        original_mask = read_mask(mask_file)
+    else:
+        image_loader = HuBMAPDataset(raw_data_dir + '/test/%s.tiff' % id, sz=tile_size)
+
+    height, width = image_loader.height, image_loader.width
+
+    # height, width = image.shape[:2]
+    print(f"image size: height={height} x width={width}")
+
+    # ----------------------------------------------------------------------
+    # calcul des centroides des glomeruli / aux prédictions de la layer 1
+    # ----------------------------------------------------------------------
+    centroid_list = _get_centroids(layer1_path, id, width, height, image_size)
 
     # -------------------------
     # loop over the centroids
@@ -264,12 +414,9 @@ def extract_tiles_from_predictions(id, tile_size, layer1_path, server):
     tile_image = []
     tile_mask = []
     coord = []
-    for cX, cY in centroid_list:
-        sub_image = image[
-                    cY - image_size // 2: cY + image_size // 2,
-                    cX - image_size // 2: cX + image_size // 2,
-                    :]
 
+    for cX, cY in centroid_list:
+        sub_image, _ = image_loader[(cX - image_size // 2, cY - image_size // 2)]
         if server == 'local':
             sub_mask = original_mask[
                         cY - image_size // 2: cY + image_size // 2,
@@ -279,15 +426,71 @@ def extract_tiles_from_predictions(id, tile_size, layer1_path, server):
         coord.append([cX, cY, 1])
         tile_image.append(np.copy(sub_image))
 
-    return image, tile_image, tile_mask, coord
+    image = None
+    return image, tile_image, tile_mask, coord, height, width
 
 
+def result_bookeeping(id, tile_probability, overall_probabilities,
+                      tile_mask, tile_image, tile_centroids, server, submit_dir):
 
+    probas = np.mean(overall_probabilities, axis=0)
+
+    num = 0
+    for i, image in enumerate(tile_image):
+        print(f'image n°{i}', end='\r')
+
+        x0, y0 = tile_centroids[i][:2]
+
+        if server == 'local':
+            overlay = draw_contour_overlay(
+                np.ascontiguousarray(image.transpose(1, 2, 0)).astype(np.float32),
+                tile_mask[i, :, :].astype(np.float32),
+                color=(1, 0, 0),
+                thickness=6
+            )
+        else:
+            overlay = np.ascontiguousarray(image.transpose(1, 2, 0)).astype(np.float32)
+
+        if len(overall_probabilities) == 1:
+            overlay2 = draw_contour_overlay(
+                overlay,
+                tile_probability[i, :, :].astype(np.float32),
+                color=(0, 1, 0),
+                thickness=6
+            )
+            cv2.imwrite(submit_dir + f'/{id}/y{y0}_x{x0}.png', (overlay2 * 255).astype(np.uint8))
+        else:
+            overlay2 = draw_contour_overlay(
+                overlay,
+                probas[i, :, :].astype(np.float32),
+                color=(0, 1, 0),
+                thickness=6
+            )
+            cv2.imwrite(submit_dir + f'/{id}/y{y0}_x{x0}.png', (overlay2 * 255).astype(np.uint8))
+            overlay2 = draw_contour_overlay(
+                overlay2,
+                tile_probability[i, :, :].astype(np.float32),
+                color=(0, 0, 1),
+                thickness=3
+            )
+
+        num += 1
+
+        image_show_norm('overlay2',
+                        overlay2,
+                        min=0, max=1, resize=1)
+        cv2.waitKey(1)
+    return
 
 
 def submit(sha, server, iterations, fold, flip_predict, checkpoint_sha, layer1):
 
     out_dir = project_repo + f"/result/Layer_2/fold{'_'.join(map(str, fold))}"
+
+    # --------------------------------------------------------------
+    # Verifie le sha1 du modèle à utiliser pour faire l'inférence
+    # Le commit courant est utilisé si non spécifié
+    # --------------------------------------------------------------
     if checkpoint_sha is not None:
         print("Checkpoint for current inference:", checkpoint_sha)
         _sha = checkpoint_sha
@@ -296,6 +499,10 @@ def submit(sha, server, iterations, fold, flip_predict, checkpoint_sha, layer1):
         _sha = sha
         _checkpoint_dir = out_dir + f"/checkpoint_{sha}/"
 
+    # --------------------------------------------------------------
+    # Verifie les checkpoints à utiliser pour l'inférence
+    # either 'all' or INTEGER (= nb iterations)
+    # --------------------------------------------------------------
     if iterations == 'all':
         iter_tag = 'all'
         model_checkpoints = [_file for _file in os.listdir(_checkpoint_dir)]
@@ -354,13 +561,13 @@ def submit(sha, server, iterations, fold, flip_predict, checkpoint_sha, layer1):
     start_timer = timer()
     for ind, id in enumerate(valid_image_id):
 
-        # if ind != 2: continue
+        # if ind != 5: continue   # test d'usage de RAM
+        # if ind != 0: continue
 
-        print(50*"=")
+        log.write(50*"=")
+        log.write(f"Inference for image: {id}")
 
         image, mask, json_file = get_images(server, id)
-
-        print(f"Inference for image: {id}")
 
         tile = layer2_tiling(id, mask, tile_scale, tile_size, tile_average_step, tile_min_score, layer1, server)
 
@@ -378,19 +585,15 @@ def submit(sha, server, iterations, fold, flip_predict, checkpoint_sha, layer1):
         print(30 * '-')
         print("tile matrix shape:", tile_image.shape)
 
-
-        # height, width = tile['image_small'].shape[:2]
         height = tile['height']
         width = tile['width']
 
-        # image_small = tile['image_small'].astype(np.float32) / 255
-        # print('---', image_small.shape)
-
-        individual_probabilities = []
         overall_probabilities = []
+        nb_checkpoints = len(initial_checkpoint)
         for _num, _checkpoint in enumerate(initial_checkpoint):
 
-            print("processing checkpoint:", _checkpoint)
+            log.write(30 * "-")
+            log.write("processing checkpoint:", _checkpoint)
 
             net = Net().cuda()
             state_dict = torch.load(_checkpoint, map_location=lambda storage, loc: storage)['state_dict']
@@ -403,75 +606,30 @@ def submit(sha, server, iterations, fold, flip_predict, checkpoint_sha, layer1):
                 submit_dir
             )
 
-            # before squeeze, dimension = N_tiles x tile_x x tile_y
             tile_probability = np.concatenate(tile_probability).squeeze(1)  # N_tiles x tile_x x tile_y
             overall_probabilities.append(tile_probability)
-            probas = np.mean(overall_probabilities, axis=0)
 
-            num = 0
-            for i, image in enumerate(tile_image):
-                print(f'image n°{i}', end='\r')
+            result_bookeeping(id,
+                tile_probability, overall_probabilities,
+                tile_mask, tile_image, tile_centroids, server, submit_dir
+            )
 
-                x0, y0 = tile_centroids[i][:2]
+            _tmp = to_mask(tile_probability,  # height x width
+                           tile['coord'],
+                           tile['height'],
+                           tile['width'],
+                           tile_scale,
+                           tile_size,
+                           tile_average_step,
+                           tile_min_score,
+                           aggregate='mean')
 
-                if server == 'local':
-                    overlay = draw_contour_overlay(
-                        np.ascontiguousarray(image.transpose(1, 2, 0)).astype(np.float32),
-                        tile_mask[i, :, :].astype(np.float32),
-                        color=(1, 0, 0),
-                        thickness=6
-                    )
-                else:
-                    overlay = np.ascontiguousarray(image.transpose(1, 2, 0)).astype(np.float32)
+            if _num == 0:
+                probability = _tmp
+            else:
+                probability += _tmp
 
-                if len(overall_probabilities) == 1:
-                    overlay2 = draw_contour_overlay(
-                        overlay,
-                        tile_probability[i, :, :].astype(np.float32),
-                        color=(0, 1, 0),
-                        thickness=6
-                    )
-                    cv2.imwrite(submit_dir + f'/{id}/y{y0}_x{x0}.png', (overlay2 * 255).astype(np.uint8))
-                else:
-                    overlay2 = draw_contour_overlay(
-                        overlay,
-                        probas[i, :, :].astype(np.float32),
-                        color=(0, 1, 0),
-                        thickness=6
-                    )
-                    cv2.imwrite(submit_dir + f'/{id}/y{y0}_x{x0}.png', (overlay2 * 255).astype(np.uint8))
-                    overlay2 = draw_contour_overlay(
-                        overlay2,
-                        tile_probability[i, :, :].astype(np.float32),
-                        color=(0, 0, 1),
-                        thickness=3
-                    )
-
-                num += 1
-
-                image_show_norm('overlay2',
-                                overlay2,
-                                min=0, max=1, resize=1)
-                cv2.waitKey(1)
-                # cv2.waitKey((0, 1)[_num == 0])
-
-            probability = to_mask(tile_probability,  # height x width
-                                  tile['coord'],
-                                  tile['height'],
-                                  tile['width'],
-                                  tile_scale,
-                                  tile_size,
-                                  tile_average_step,
-                                  tile_min_score,
-                                  aggregate='mean')
-
-            individual_probabilities.append(probability)
-
-            if _num == 0: break
-
-        probability = np.mean(individual_probabilities, axis=0)
-
-        # sys.exit()
+        probability /= nb_checkpoints
 
         # -------------------------------------------------
         # Saves the numpy array that contains probabilities
@@ -485,9 +643,10 @@ def submit(sha, server, iterations, fold, flip_predict, checkpoint_sha, layer1):
 
 
         if server == 'local':
-            loss = np_binary_cross_entropy_loss(probability, truth)
-            dice = np_dice_score(probability, truth)
-            tp, tn = np_accuracy(probability, truth)
+            print("starts compute score")
+            loss = np_binary_cross_entropy_loss_optimized(probability, truth)
+            dice = np_dice_score_optimized(probability, truth)
+            tp, tn = np_accuracy_optimized(probability, truth)
             log.write('submit_dir = %s \n' % submit_dir)
             log.write('initial_checkpoint = %s \n' % initial_checkpoint)
             log.write('loss   = %0.8f \n' % loss)
@@ -499,10 +658,6 @@ def submit(sha, server, iterations, fold, flip_predict, checkpoint_sha, layer1):
             predict = (probability > 0.5).astype(np.float32)
             p = rle_encode(predict)
             predicted.append(p)
-            # _df = pd.DataFrame()
-            # df['id'] = id
-            # df['predicted'] = predicted
-
 
     #-----
     if server == 'kaggle':
@@ -599,19 +754,19 @@ if __name__ == '__main__':
     model_sha = repo.head.object.hexsha[:9]
     print(f"current commit: {model_sha}")
 
-    # changedFiles = [item.a_path for item in repo.index.diff(None) if item.a_path.endswith(".py")]
-    # if len(changedFiles) > 0:
-    #     print("ABORT submission -- There are unstaged files:")
-    #     for _file in changedFiles:
-    #         print(f" * {_file}")
-    #
-    # else:
-    submit(model_sha,
-           server=args.Server,
-           iterations=args.Iterations,
-           fold=fold,
-           flip_predict=args.flip,
-           checkpoint_sha=args.CheckpointSha,
-           layer1 = args.layer1
-           )
+    changedFiles = [item.a_path for item in repo.index.diff(None) if item.a_path.endswith(".py")]
+    if len(changedFiles) > 0:
+        print("ABORT submission -- There are unstaged files:")
+        for _file in changedFiles:
+            print(f" * {_file}")
+
+    else:
+        submit(model_sha,
+               server=args.Server,
+               iterations=args.Iterations,
+               fold=fold,
+               flip_predict=args.flip,
+               checkpoint_sha=args.CheckpointSha,
+               layer1 = args.layer1
+               )
 

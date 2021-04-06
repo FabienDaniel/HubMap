@@ -1,7 +1,3 @@
-import argparse
-
-import rasterio
-
 from code.common import *
 import tifffile as tiff
 
@@ -14,31 +10,7 @@ def read_tiff(image_file):
     elif image.shape[2] == 3 and image.ndim == 5 :
         image = np.transpose(image.squeeze(), (1, 2, 0))
     image = np.ascontiguousarray(image)
-
-    print(image.shape)
-    sys.exit()
-
     return image
-
-
-# def read_tiff(image_file):
-#     with rasterio.open(image_file) as file:
-#         if file.count == 3:
-#             image = file.read([1, 2, 3]).transpose(1, 2, 0).copy()
-#         else:
-#             h, w = (file.height, file.width)
-#             subdatasets = file.subdatasets
-#             if len(subdatasets) > 0:
-#                 image = np.zeros((h, w, len(subdatasets)), dtype=np.uint8)
-#                 for i, subdataset in enumerate(subdatasets, 0):
-#                     with rasterio.open(subdataset) as layer:
-#                         image[:, :, i] = layer.read(1)
-#
-#     print(image.shape)
-#     sys.exit()
-#
-#     return image
-
 
 
 def to_tile(image,

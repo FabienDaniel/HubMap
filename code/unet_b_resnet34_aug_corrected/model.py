@@ -13,40 +13,111 @@ from code.lib.net.lovasz_loss import *
 
 #------------------------------------
 def np_binary_cross_entropy_loss(probability, mask):
+
+    print(probability.shape, mask.shape)
+
     p = probability.reshape(-1)
     t = mask.reshape(-1)
 
-    # print("here")
-    #---
-    logp = -np.log(np.clip(p,1e-6,1))
-    logn = -np.log(np.clip(1-p,1e-6,1))
-    loss = t*logp +(1-t)*logn
+    print("here")
+
+    loss = -t * np.log(np.clip(p, 1e-6, 1)) - (1-t) * np.log(np.clip(1-p, 1e-6, 1))
+
+    print(loss, len(loss))
+
+    print("-2-")
+
     loss = loss.mean()
 
-    # print("end")
+    print("end")
 
     return loss
+
+
+def np_binary_cross_entropy_loss_optimized(probability, mask):
+    p = probability.reshape(-1)
+    t = mask.reshape(-1)
+    size = len(p)
+    batch_size = 2000000
+    sum_loss, count = 0, 0
+    print(f"bce - optimized; {size // batch_size + 1} iterations")
+    for i in range(size // batch_size + 1):
+        i1 = i * batch_size
+        i2 = min((i + 1) * batch_size, size)
+        loss = -t[i1:i2] * np.log(np.clip(p[i1:i2], 1e-6, 1)) - (1 - t[i1:i2]) * np.log(np.clip(1 - p[i1:i2], 1e-6, 1))
+        count += len(loss)
+        sum_loss += loss.sum()
+        print(f"iteration n°{i}, loss={round(sum_loss / count, 5)}", end='\r')
+    loss = sum_loss / count
+    return loss
+
+
+def np_dice_score_optimized(probability, mask):
+    p = probability.reshape(-1)
+    t = mask.reshape(-1)
+    p = p > 0.5
+    t = t > 0.5
+    size = len(p)
+    batch_size = 2000000
+    union, overlap = 0, 0
+    print(f"dice - optimized; {size // batch_size + 1} iterations")
+    for i in range(size // batch_size + 1):
+        i1 = i * batch_size
+        i2 = min((i + 1) * batch_size, size)
+        union += p[i1:i2].sum() + t[i1:i2].sum()
+        overlap += (p[i1:i2] * t[i1:i2]).sum()
+
+    dice = 2 * overlap / (union + 0.001)
+    return dice
 
 
 def np_dice_score(probability, mask):
     p = probability.reshape(-1)
     t = mask.reshape(-1)
 
+    print("here - a")
     p = p>0.5
     t = t>0.5
     uion = p.sum() + t.sum()
     overlap = (p*t).sum()
     dice = 2*overlap/(uion+0.001)
+
+    print("here - b")
+
     return dice
 
 
-def np_accuracy(probability, mask):
+# def np_accuracy(probability, mask):
+#     p = probability.reshape(-1)
+#     t = mask.reshape(-1)
+#     p = p>0.5
+#     t = t>0.5
+#     tp = (p*t).sum()/(t).sum()
+#     tn = ((1-p)*(1-t)).sum()/(1-t).sum()
+#     return tp, tn
+
+
+def np_accuracy_optimized(probability, mask):
     p = probability.reshape(-1)
     t = mask.reshape(-1)
-    p = p>0.5
-    t = t>0.5
-    tp = (p*t).sum()/(t).sum()
-    tn = ((1-p)*(1-t)).sum()/(1-t).sum()
+    p = p > 0.5
+    t = t > 0.5
+
+    size = len(p)
+    batch_size = 2000000
+    a, b, c, d = 0, 0, 0, 0
+    print(f"accuracy - optimized; {size // batch_size + 1} iterations")
+    for i in range(size // batch_size + 1):
+        i1 = i * batch_size
+        i2 = min((i + 1) * batch_size, size)
+
+        a += (p[i1:i2] * t[i1:i2]).sum()
+        b += t[i1:i2].sum()
+        c += ((1-p[i1:i2]) * (1-t[i1:i2])).sum()
+        d += (1-t[i1:i2]).sum()
+
+    tp = a / b
+    tn = c / d
     return tp, tn
 
 
