@@ -184,70 +184,6 @@ def layer2_tiling(image,
     }
 
 
-# class HuBMAPDataset:
-#     def __init__(self, image_path, sz=256, saturation_threshold=40):
-#
-#         self.s_th = saturation_threshold   # saturation blancking threshold
-#         self.p_th = 1000 * (sz // 256) ** 2  # threshold for the minimum number of pixels
-#         identity = rasterio.Affine(1, 0, 0, 0, 1, 0)
-#
-#         self.data = rasterio.open(
-#             os.path.join(image_path),
-#             transform=identity,
-#             num_threads='all_cpus'
-#         )
-#         # some images have issues with their format
-#         # and must be saved correctly before reading with rasterio
-#         if self.data.count != 3:
-#             subdatasets = self.data.subdatasets
-#             self.layers = []
-#             if len(subdatasets) > 0:
-#                 for i, subdataset in enumerate(subdatasets, 0):
-#                     self.layers.append(rasterio.open(subdataset))
-#         self.shape = self.data.shape
-#
-#         self.width  = self.shape[0]
-#         self.height = self.shape[1]
-#
-#         self.reduce = 1
-#         self.sz = sz
-#         # self.n0max = self.shape[0] // self.sz
-#         # self.n1max = self.shape[1] // self.sz
-#
-#         print(f"image loader for {image_path} created")
-#
-#     def __len__(self):
-#         return self.n0max * self.n1max
-#
-#     def __getitem__(self, pos):
-#         x0, y0 = pos
-#         # make sure that the region to read is within the image
-#
-#         p00, p01 = max(0, x0), min(x0 + self.sz, self.width)
-#         p10, p11 = max(0, y0), min(y0 + self.sz, self.height)
-#         img = np.zeros((self.sz, self.sz, 3), np.uint8)
-#         # mapping the load region to the tile
-#         if self.data.count == 3:
-#             img[(p00 - x0):(p01 - x0), (p10 - y0):(p11 - y0)] = np.moveaxis(
-#                 self.data.read([1, 2, 3], window = Window.from_slices((p00, p01), (p10, p11))), 0, -1)
-#         else:
-#             for i, layer in enumerate(self.layers):
-#                 img[(p00 - x0):(p01 - x0), (p10 - y0):(p11 - y0), i] = \
-#                     layer.read(1, window=Window.from_slices((p00, p01), (p10, p11)))
-#
-#         if self.reduce != 1:
-#             img = cv2.resize(img, (self.sz // self.reduce, self.sz // self.reduce),
-#                              interpolation=cv2.INTER_AREA)
-#         # check for empty images
-#         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-#         h, s, v = cv2.split(hsv)
-#
-#         norm = 1
-#         if (s > self.s_th).sum() <= self.p_th or img.sum() <= self.p_th:
-#             return img / norm, -1
-#         else:
-#             return img / norm, +1
-
 class HuBMAPDataset:
     def __init__(self, image_path, sz=256, saturation_threshold=40):
 
@@ -508,14 +444,27 @@ def submit(sha, server, iterations, fold, flip_predict, checkpoint_sha, layer1):
         model_checkpoints = [_file for _file in os.listdir(_checkpoint_dir)]
         initial_checkpoint = [out_dir + f'/checkpoint_{_sha}/{model_checkpoint}'
                               for model_checkpoint in model_checkpoints]
+    elif 'top' in iterations:
+        nbest = int(iterations.strip('top'))
+
+        iter_tag = f'top{nbest}'
+        model_checkpoints = [_file for _file in os.listdir(_checkpoint_dir)]
+        scores = [float(_file.split('_')[1]) for _file in os.listdir(_checkpoint_dir)]
+
+        ordered_models = list(zip(model_checkpoints, scores))
+        ordered_models.sort(key = lambda x: x[1], reverse=True)
+        model_checkpoints = np.array(ordered_models[:nbest])[:, 0]
+        model_checkpoints = model_checkpoints.tolist()
+
+        initial_checkpoint = [out_dir + f'/checkpoint_{_sha}/{model_checkpoint}'
+                              for model_checkpoint in model_checkpoints]
     else:
         iter_tag = f"{int(iterations):08}"
         [model_checkpoint] = [_file for _file in os.listdir(_checkpoint_dir)
                               if iter_tag in _file.split('_')[0]]
         initial_checkpoint = [out_dir + f'/checkpoint_{_sha}/{model_checkpoint}']
 
-    print("checkpoint:", initial_checkpoint)
-
+    print("checkpoint(s):", initial_checkpoint)
     print(f"submit with server={server}")
 
     #---
@@ -564,8 +513,8 @@ def submit(sha, server, iterations, fold, flip_predict, checkpoint_sha, layer1):
         # if ind != 5: continue   # test d'usage de RAM
         # if ind != 0: continue
 
-        log.write(50*"=")
-        log.write(f"Inference for image: {id}")
+        log.write(50 * "=" + "\n")
+        log.write(f"Inference for image: {id} \n")
 
         image, mask, json_file = get_images(server, id)
 
@@ -592,8 +541,8 @@ def submit(sha, server, iterations, fold, flip_predict, checkpoint_sha, layer1):
         nb_checkpoints = len(initial_checkpoint)
         for _num, _checkpoint in enumerate(initial_checkpoint):
 
-            log.write(30 * "-")
-            log.write("processing checkpoint:", _checkpoint)
+            log.write(30 * "-" + "\n")
+            log.write(f"processing checkpoint: {_checkpoint} \n")
 
             net = Net().cuda()
             state_dict = torch.load(_checkpoint, map_location=lambda storage, loc: storage)['state_dict']
@@ -647,8 +596,10 @@ def submit(sha, server, iterations, fold, flip_predict, checkpoint_sha, layer1):
             loss = np_binary_cross_entropy_loss_optimized(probability, truth)
             dice = np_dice_score_optimized(probability, truth)
             tp, tn = np_accuracy_optimized(probability, truth)
+
+            log.write(30 * "-" + '\n')
             log.write('submit_dir = %s \n' % submit_dir)
-            log.write('initial_checkpoint = %s \n' % initial_checkpoint)
+            log.write('initial_checkpoint = %s \n' % [c.split('2020-12-11')[-1] for c in initial_checkpoint])
             log.write('loss   = %0.8f \n' % loss)
             log.write('dice   = %0.8f \n' % dice)
             log.write('tp, tn = %0.8f, %0.8f \n' % (tp, tn))
@@ -754,19 +705,19 @@ if __name__ == '__main__':
     model_sha = repo.head.object.hexsha[:9]
     print(f"current commit: {model_sha}")
 
-    changedFiles = [item.a_path for item in repo.index.diff(None) if item.a_path.endswith(".py")]
-    if len(changedFiles) > 0:
-        print("ABORT submission -- There are unstaged files:")
-        for _file in changedFiles:
-            print(f" * {_file}")
-
-    else:
-        submit(model_sha,
-               server=args.Server,
-               iterations=args.Iterations,
-               fold=fold,
-               flip_predict=args.flip,
-               checkpoint_sha=args.CheckpointSha,
-               layer1 = args.layer1
-               )
+    # changedFiles = [item.a_path for item in repo.index.diff(None) if item.a_path.endswith(".py")]
+    # if len(changedFiles) > 0:
+    #     print("ABORT submission -- There are unstaged files:")
+    #     for _file in changedFiles:
+    #         print(f" * {_file}")
+    #
+    # else:
+    submit(model_sha,
+           server=args.Server,
+           iterations=args.Iterations,
+           fold=fold,
+           flip_predict=args.flip,
+           checkpoint_sha=args.CheckpointSha,
+           layer1 = args.layer1
+           )
 
