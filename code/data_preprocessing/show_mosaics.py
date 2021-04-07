@@ -150,6 +150,6 @@ if __name__ == '__main__':
     # print("creating:", pathdir + '/%s.reconstructed.png' % image_name)
     #
     # image.save(pathdir + '/%s.reconstructed.png' % image_name, "PNG")
-
+    # image.save(pathdir + '/%s.reconstructed.png' % image_name, quality=95)
 
 

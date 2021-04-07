@@ -60,7 +60,7 @@ def np_dice_score_optimized(probability, mask):
     size = len(p)
     batch_size = 2000000
     union, overlap = 0, 0
-    print(f"dice - optimized; {size // batch_size + 1} iterations")
+    # print(f"dice - optimized; {size // batch_size} iterations")
     for i in range(size // batch_size + 1):
         i1 = i * batch_size
         i2 = min((i + 1) * batch_size, size)

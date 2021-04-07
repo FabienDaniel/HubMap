@@ -157,6 +157,10 @@ def rle_encode(mask):
 
 
 def to_mask(tile, coord, height, width, scale, size, step, min_score, aggregate='mean'):
+    """
+    Aggrège les différentes images. Si elles se recouvrent, les pixels sont pondérés /
+     à la position du centre de l'image.
+    """
 
     half = size // 2
     mask  = np.zeros((height, width), np.float32)
@@ -191,9 +195,7 @@ def to_mask(tile, coord, height, width, scale, size, step, min_score, aggregate=
 
         # m = (count != 0)
         # mask[m] /= count[m]
-
-        print(sys.getsizeof(mask) * 1e-6, 'Mb', sys.getsizeof(count) * 1e-6, 'Mb')
-
+        # print(sys.getsizeof(mask) * 1e-6, 'Mb', sys.getsizeof(count) * 1e-6, 'Mb')
 
         length = 100
         for i in range(mask.shape[0] // length + 1):
