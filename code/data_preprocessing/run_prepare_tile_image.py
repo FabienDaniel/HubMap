@@ -43,7 +43,15 @@ def extract_centroids_from_predictions(
         train_tile_dir,
         sha
 ):
-
+    """
+    On récupère un .png avec les prédictions.
+    On extraie les contours de ce .png.
+    On compare les centroides des contours extraits aux positions des mask réels. Si la distance
+     à supérieure à D (=500), l'image n'est pas conservée (car associée à un TP).
+    ----------------------------------------------------------------------------------------------------
+    Les sous images sauvegardées correspondent à des FP. Les sous-images sont centrées sur les positions
+    des centroides des mauvaises prédictions.
+    """
     df_train = pd.read_csv(raw_data_dir + '/train.csv')
     image_size = tile_size
 
@@ -89,14 +97,15 @@ def extract_centroids_from_predictions(
             cX = int(M["m10"] / M["m00"])
             cY = int(M["m01"] / M["m00"])
 
+            ########################################################
+            ### On vérifie la distance / à la liste des vrais masques
+            ########################################################
             distance = real_mask_centroids.apply(lambda x: ((x[0] - cX)**2 + (x[1] - cY)**2)**0.5, axis=1)
             if distance.min() < 500:
                 # print(f"Skips correct prediction @ {cX} {cY}")
                 continue
             else:
                 print(f"Wrong prediction @ {cX} {cY} d={distance.min()}")
-            #
-            # sys.exit()
 
             # draw the contour and center of the shape on the image
             cv2.drawContours(image_copy, [c], -1, (0, 255, 0), 2)
@@ -104,9 +113,9 @@ def extract_centroids_from_predictions(
             cv2.putText(image_copy, f"x={cX}, y={cY} ", (cX - 20, cY - 20),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
 
-            # ---------------------------------------
-            # check how close from image boundaries
-            # ---------------------------------------
+            ########################################################
+            ### check how close from image boundaries
+            ########################################################
             if cX - image_size // 2 < 0:
                 x0 = image_size // 2
             elif cX + image_size // 2 > image_copy.shape[1]:
@@ -126,7 +135,6 @@ def extract_centroids_from_predictions(
         # -------------------------
         # visualisation loop
         # -------------------------
-
         for cX, cY in centroid_list:
             resize = 1
             sub_image = image_copy[
@@ -138,29 +146,168 @@ def extract_centroids_from_predictions(
                 print(cX, cY, sub_image.shape, image_copy.shape)
                 sys.exit(1)
 
-
             cv2.namedWindow("sub_Image", cv2.WINDOW_GUI_NORMAL)
             cv2.imshow("sub_Image", sub_image)
             cv2.resizeWindow('sub_Image', round(resize * image_size), round(resize * image_size))
             cv2.waitKey(1)
 
-        # -------------------------
-        # loop over the centroids
-        # -------------------------
+        ########################################################
+        ### loop over the centroids.
+        ### Les images et la masques sont sauvegardés sur disque.
+        ########################################################
         image_size = tile_size
         for cX, cY in centroid_list:
             sub_image = image[
                         cY - image_size // 2: cY + image_size // 2,
                         cX - image_size // 2: cX + image_size // 2,
                         :]
-
             sub_mask = original_mask[
                        cY - image_size // 2: cY + image_size // 2,
                        cX - image_size // 2: cX + image_size // 2]
 
             # print(cX, cY, sub_image.shape)
-
             s = 'y%08d_x%08d' % (cY, cX)
+            cv2.imwrite(train_tile_dir + '/%s/%s.png' % (id, s), sub_image)
+            cv2.imwrite(train_tile_dir + '/%s/%s.mask.png' % (id, s), sub_mask)
+
+        pd.DataFrame(centroid_list, columns={'x', 'y'}).to_csv(train_tile_dir + '/centroids_%s.csv' % id)
+
+
+##########################################################################################################
+def extract_centroids_from_L2_predictions(
+        image_size,
+        train_tile_dir,
+        sha,
+        pred_tag,
+        base_path
+):
+    """
+    On récupère un .png avec les prédictions.
+    On extraie les contours de ce .png.
+    On compare les centroides des contours extraits aux positions des mask réels. Si la distance
+     à supérieure à D (=500), l'image n'est pas conservée (car associée à un TP).
+    ----------------------------------------------------------------------------------------------------
+    Les sous images sauvegardées correspondent à des FP. Les sous-images sont centrées sur les positions
+    des centroides des mauvaises prédictions.
+    """
+    df_train = pd.read_csv(raw_data_dir + '/train.csv')
+    # image_size = tile_size
+    os.makedirs(train_tile_dir, exist_ok=True)
+
+    ###########################################################
+    ### On boucle sur les images de training
+    ###########################################################
+    for i in range(0, len(df_train)):
+        id, encoding = df_train.iloc[i]
+        # if id != 'c68fe75ea': continue
+        os.makedirs(train_tile_dir + '/%s' % id, exist_ok=True)
+
+        real_mask_centroids = pd.read_csv(project_repo + f'/data/tile/' + f"/centroids_{id}.csv", index_col=0)
+
+        print(50 * '-')
+        print(f"processing image: {id}")
+
+        #-----------------------------
+        # Lecture de l'image de base
+        # -----------------------------
+        image_file = raw_data_dir + '/train/%s.tiff' % id
+        image = read_tiff(image_file)
+        image_copy = np.copy(image)
+        height, width = image.shape[:2]
+        print(f"image size: {height} x {width}")
+
+        # ------------------------------------------
+        # Extraction du masque de l'image initiale
+        # ------------------------------------------
+        original_mask = rle_decode(encoding, height, width, 255)
+
+        # ---------------------------------------------
+        # Extraction des masques issus des prédictions
+        # ---------------------------------------------
+
+        file = os.path.join(base_path, f"{id}_scores.csv")
+        df = pd.read_csv(file, index_col=0)
+
+        _tmp = df[df['dice'] < 0.8]
+        print(_tmp.shape)
+        print(_tmp.head())
+
+        cnts = _tmp[['x', 'y', 'dice']].values
+
+        # -----------------------------------------
+        # loop over the contours to get centroids
+        # -----------------------------------------
+        centroid_list = []
+        for cX, cY, score in cnts:
+            ########################################################
+            ### On vérifie la distance / à la liste des vrais masques
+            ########################################################
+            distance = real_mask_centroids.apply(lambda x: ((x[0] - cX) ** 2 + (x[1] - cY) ** 2) ** 0.5, axis=1)
+            if distance.min() < 500:
+                # print(f"Skips correct prediction @ {cX} {cY}")
+                continue
+            else:
+                print(f"Wrong prediction @ {cX} {cY} d={distance.min()}, score={score}")
+
+            ########################################################
+            ### check how close from image boundaries
+            ########################################################
+            if cX - image_size // 2 < 0:
+                x0 = image_size // 2
+            elif cX + image_size // 2 > image_copy.shape[1]:
+                x0 = image_copy.shape[1] - image_size // 2
+            else:
+                x0 = cX
+
+            if cY - image_size // 2 < 0:
+                y0 = image_size // 2
+            elif cY + image_size // 2 > image_copy.shape[0]:
+                y0 = image_copy.shape[0] - image_size // 2
+            else:
+                y0 = cY
+
+            centroid_list.append([int(x0), int(y0)])
+
+        # -------------------------
+        # visualisation loop
+        # -------------------------
+        for cX, cY in centroid_list:
+            resize = 1
+            sub_image = image_copy[
+                        cY - image_size // 2: cY + image_size // 2,
+                        cX - image_size // 2: cX + image_size // 2,
+                        :]
+
+            if sub_image.shape[0] != sub_image.shape[1]:
+                print(cX, cY, sub_image.shape, image_copy.shape)
+                sys.exit(1)
+
+            cv2.namedWindow("sub_Image", cv2.WINDOW_GUI_NORMAL)
+            cv2.imshow("sub_Image", sub_image)
+            cv2.resizeWindow('sub_Image', round(resize * image_size), round(resize * image_size))
+            cv2.waitKey(1)
+
+        # sys.exit()
+
+        ########################################################
+        ### loop over the centroids.
+        ### Les images et la masques sont sauvegardés sur disque.
+        ########################################################
+        # image_size = tile_size
+        for cX, cY in centroid_list:
+            sub_image = image[
+                        cY - image_size // 2: cY + image_size // 2,
+                        cX - image_size // 2: cX + image_size // 2,
+                        :]
+            sub_mask = original_mask[
+                       cY - image_size // 2: cY + image_size // 2,
+                       cX - image_size // 2: cX + image_size // 2]
+
+            # print(cX, cY, sub_image.shape)
+            s = 'y%08d_x%08d' % (cY, cX)
+
+            # print(train_tile_dir + '/%s/%s.png' % (id, s))
+
             cv2.imwrite(train_tile_dir + '/%s/%s.png' % (id, s), sub_image)
             cv2.imwrite(train_tile_dir + '/%s/%s.mask.png' % (id, s), sub_mask)
 
@@ -346,9 +493,21 @@ if __name__ == '__main__':
     #     train_tile_dir=project_repo + f'/data/tile/mask_{tile_size}_centroids'
     # )
 
-    sha = "4707bcbcf"
-    extract_centroids_from_predictions(
-        tile_size=tile_size,
-        train_tile_dir=project_repo + f'/data/tile/predictions_{sha}_{tile_size}_centroids',
-        sha=sha
+    # sha = "4707bcbcf"
+    # extract_centroids_from_predictions(
+    #     tile_size=tile_size,
+    #     train_tile_dir=project_repo + f'/data/tile/predictions_{sha}_{tile_size}_centroids',
+    #     sha=sha
+    # )
+
+    sha = "680598dcf"
+    pred_tag = 'top3-587bbaf61-mean'
+    base_path = f"result/Layer_2/fold6_9_10/predictions_{sha}/local-{pred_tag}"
+
+    extract_centroids_from_L2_predictions(
+        image_size=tile_size,
+        train_tile_dir=project_repo + f'/data/tile/predictions_{sha}_{pred_tag}_{tile_size}_centroids',
+        sha=sha,
+        pred_tag=pred_tag,
+        base_path=base_path
     )

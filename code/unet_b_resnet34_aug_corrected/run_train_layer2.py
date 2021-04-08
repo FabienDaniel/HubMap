@@ -165,7 +165,10 @@ def run_train(show_valid_images=False,
     train_dataset = CenteredHuDataset(
         image_id                 = make_image_id('train', fold),
         from_mask_image_dir      = f'mask_{tile_size}_centroids',
-        false_positive_image_dir = ['predictions_4707bcbcf_700_centroids'],
+        false_positive_image_dir = [
+            'predictions_4707bcbcf_700_centroids',
+            'predictions_680598dcf_top3-587bbaf61-mean_700_centroids',
+        ],
         augment                  = train_augment,
     )
     train_loader = DataLoader(
