@@ -115,7 +115,7 @@ def get_probas(
     return probability
 
 
-def submit(sha, server, iterations, fold, flip_predict, checkpoint_sha):
+def submit(sha, server, iterations, fold, flip_predict, checkpoint_sha, proba_threshold=0.5):
 
     out_dir = project_repo + f"/result/Baseline/fold{'_'.join(map(str, fold))}"
     if checkpoint_sha is not None:
@@ -239,7 +239,7 @@ def submit(sha, server, iterations, fold, flip_predict, checkpoint_sha):
             truth,                # red
         ])
         image_small = tile['image_small'].astype(np.float32)/255
-        predict = (probability > 0.5).astype(np.float32)
+        predict = (probability > proba_threshold).astype(np.float32)
         overlay1 = 1-(1-image_small)*(1-overlay)
 
         overlay2 = image_small.copy()
@@ -389,6 +389,7 @@ if __name__ == '__main__':
                iterations=args.Iterations,
                fold=fold,
                flip_predict=args.flip,
-               checkpoint_sha=args.CheckpointSha
+               checkpoint_sha=args.CheckpointSha,
+               proba_threshold=0.2
                )
 
