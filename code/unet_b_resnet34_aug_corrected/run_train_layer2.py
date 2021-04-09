@@ -160,7 +160,7 @@ def run_train(show_valid_images=False,
     ##################################################
     ## dataset ---------------------------------------
     ##################################################
-    log.write('** dataset setting **\n')
+    log.write(30*'-' + '\n' + '*** TRAIN dataset setting ***\n' + 30*'-' + '\n')
 
     train_dataset = CenteredHuDataset(
         image_id                 = make_image_id('train', fold),
@@ -171,6 +171,7 @@ def run_train(show_valid_images=False,
             'predictions_680598dcf_top3-587bbaf61-mean_700_centroids',
         ],
         augment                  = train_augment,
+        logger                   = log
     )
     train_loader = DataLoader(
         train_dataset,
@@ -182,11 +183,13 @@ def run_train(show_valid_images=False,
         collate_fn=null_collate
     )
 
+    log.write(30*'-' + '\n' + '*** VALID dataset setting ***\n' + 30*'-' + '\n')
     valid_dataset = CenteredHuDataset(
         image_id                 = make_image_id('valid', fold),
         from_mask_image_dir      = f'mask_{tile_size}_centroids',
         false_positive_image_dir = ['predictions_4707bcbcf_700_centroids'],
         augment                  = train_augment,
+        logger                   = log
     )
 
     valid_loader = DataLoader(
@@ -199,6 +202,7 @@ def run_train(show_valid_images=False,
         collate_fn=null_collate
     )
 
+    log.write(30 * '-' + '\n' + '*** dataset setting SUMMARY***\n' + 30 * '-' + '\n')
     log.write('fold = %s\n' % ' '.join(map(str, fold)))
     log.write('train_dataset : \n%s\n' % train_dataset)
     log.write('valid_dataset : \n%s\n' % valid_dataset)
@@ -469,24 +473,24 @@ if __name__ == '__main__':
     model_sha = repo.head.object.hexsha[:9]
     print(f"current commit: {model_sha}")
 
-    changedFiles = [item.a_path for item in repo.index.diff(None) if item.a_path.endswith(".py")]
-    if len(changedFiles) > 0:
-        print("ABORT submission -- There are unstaged files:")
-        for _file in changedFiles:
-            print(f" * {_file}")
-    else:
-        run_train(
-            show_valid_images = False,
-            sha               = model_sha,
-            fold              = fold,
-            start_lr          = 0.001,
-            batch_size        = 16,
-            num_iteration     = int(args.iterations),
-            iter_log          = 250,
-            iter_save         = 250,
-            first_iter_save   = 0,
-            loss_type         = "dice_bce",
-            tile_scale        = 0.25,
-            tile_size         = 700
-        )
+    # changedFiles = [item.a_path for item in repo.index.diff(None) if item.a_path.endswith(".py")]
+    # if len(changedFiles) > 0:
+    #     print("ABORT submission -- There are unstaged files:")
+    #     for _file in changedFiles:
+    #         print(f" * {_file}")
+    # else:
+    run_train(
+        show_valid_images = False,
+        sha               = model_sha,
+        fold              = fold,
+        start_lr          = 0.001,
+        batch_size        = 16,
+        num_iteration     = int(args.iterations),
+        iter_log          = 250,
+        iter_save         = 250,
+        first_iter_save   = 0,
+        loss_type         = "dice_bce",
+        tile_scale        = 0.25,
+        tile_size         = 700
+    )
 
