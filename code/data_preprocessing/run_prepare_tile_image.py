@@ -41,7 +41,9 @@ def rle_encode(mask):
 def extract_centroids_from_predictions(
         tile_size,
         train_tile_dir,
-        sha
+        sha,
+        pred_tag,
+        base_path
 ):
     """
     On récupère un .png avec les prédictions.
@@ -78,7 +80,7 @@ def extract_centroids_from_predictions(
 
         original_mask = rle_decode(encoding, height, width, 255)
         predict = np.array(PIL.Image.open(
-            f"./result/Baseline//fold1_8_14/predictions_{sha}/local-00007500_model-mean/{id[:9]}.predict.png"
+            os.path.join(base_path, f"{id[:9]}.predict.png")
         ))
         mask = cv2.resize(predict, dsize=(width, height), interpolation=cv2.INTER_LINEAR)
 
@@ -493,21 +495,26 @@ if __name__ == '__main__':
     #     train_tile_dir=project_repo + f'/data/tile/mask_{tile_size}_centroids'
     # )
 
-    # sha = "4707bcbcf"
-    # extract_centroids_from_predictions(
-    #     tile_size=tile_size,
-    #     train_tile_dir=project_repo + f'/data/tile/predictions_{sha}_{tile_size}_centroids',
-    #     sha=sha
-    # )
+    sha = "18924a797"
+    pred_tag = 'local-all-mean'
+    base_path = f"result/Baseline/fold6_9_10/predictions_{sha}/{pred_tag}"
 
-    sha = "680598dcf"
-    pred_tag = 'top3-587bbaf61-mean'
-    base_path = f"result/Layer_2/fold6_9_10/predictions_{sha}/local-{pred_tag}"
-
-    extract_centroids_from_L2_predictions(
-        image_size=tile_size,
-        train_tile_dir=project_repo + f'/data/tile/predictions_{sha}_{pred_tag}_{tile_size}_centroids',
+    extract_centroids_from_predictions(
+        tile_size=tile_size,
+        train_tile_dir=project_repo + f'/data/tile/predictions_{sha}_{tile_size}_centroids',
         sha=sha,
         pred_tag=pred_tag,
         base_path=base_path
     )
+
+    # sha = "680598dcf"
+    # pred_tag = 'top3-587bbaf61-mean'
+    # base_path = f"result/Layer_2/fold6_9_10/predictions_{sha}/local-{pred_tag}"
+    #
+    # extract_centroids_from_L2_predictions(
+    #     image_size=tile_size,
+    #     train_tile_dir=project_repo + f'/data/tile/predictions_{sha}_{pred_tag}_{tile_size}_centroids',
+    #     sha=sha,
+    #     pred_tag=pred_tag,
+    #     base_path=base_path
+    # )

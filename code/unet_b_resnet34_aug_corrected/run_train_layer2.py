@@ -167,6 +167,7 @@ def run_train(show_valid_images=False,
         from_mask_image_dir      = f'mask_{tile_size}_centroids',
         false_positive_image_dir = [
             'predictions_4707bcbcf_700_centroids',
+            'predictions_18924a797_700_centroids',
             'predictions_680598dcf_top3-587bbaf61-mean_700_centroids',
         ],
         augment                  = train_augment,
