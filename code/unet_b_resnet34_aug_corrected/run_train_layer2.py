@@ -473,24 +473,24 @@ if __name__ == '__main__':
     model_sha = repo.head.object.hexsha[:9]
     print(f"current commit: {model_sha}")
 
-    # changedFiles = [item.a_path for item in repo.index.diff(None) if item.a_path.endswith(".py")]
-    # if len(changedFiles) > 0:
-    #     print("ABORT submission -- There are unstaged files:")
-    #     for _file in changedFiles:
-    #         print(f" * {_file}")
-    # else:
-    run_train(
-        show_valid_images = False,
-        sha               = model_sha,
-        fold              = fold,
-        start_lr          = 0.001,
-        batch_size        = 16,
-        num_iteration     = int(args.iterations),
-        iter_log          = 250,
-        iter_save         = 250,
-        first_iter_save   = 0,
-        loss_type         = "dice_bce",
-        tile_scale        = 0.25,
-        tile_size         = 700
-    )
+    changedFiles = [item.a_path for item in repo.index.diff(None) if item.a_path.endswith(".py")]
+    if len(changedFiles) > 0:
+        print("ABORT submission -- There are unstaged files:")
+        for _file in changedFiles:
+            print(f" * {_file}")
+    else:
+        run_train(
+            show_valid_images = False,
+            sha               = model_sha,
+            fold              = fold,
+            start_lr          = 0.001,
+            batch_size        = 16,
+            num_iteration     = int(args.iterations),
+            iter_log          = 250,
+            iter_save         = 250,
+            first_iter_save   = 0,
+            loss_type         = "weighted_bce",
+            tile_scale        = 0.25,
+            tile_size         = 700
+        )
 
