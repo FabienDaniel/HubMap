@@ -483,7 +483,7 @@ if __name__ == '__main__':
             show_valid_images = False,
             sha               = model_sha,
             fold              = fold,
-            start_lr          = 0.001,
+            start_lr          = 0.0005,
             batch_size        = 16,
             num_iteration     = int(args.iterations),
             iter_log          = 250,

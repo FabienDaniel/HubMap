@@ -114,6 +114,64 @@ def get_probas(id, net, tile_image, tile_centroids, tile, flip_predict, start_ti
     return tile_probability
 
 
+class tile_generator:
+    """ Reads an image and creates a generator to load sub-images
+    """
+    def __init__(self, image_id, mask=None, size=320, layer1_path=None, server=None):
+        self.size = size
+
+        print(50 * '-')
+        print(f"processing image: {id}")
+
+        if server == 'local':
+            self.image_loader = HuBMAPDataset(raw_data_dir + '/train/%s.tiff' % id, sz=self.size)
+            mask_file = raw_data_dir + '/train/%s.mask.png' % id
+            self.original_mask = read_mask(mask_file)
+        else:
+            self.image_loader = HuBMAPDataset(raw_data_dir + '/test/%s.tiff' % id, sz=self.size)
+
+        self.height, self.width = self.image_loader.height, self.image_loader.width
+        print(f"image size: height={self.height} x width={self.width}")
+
+        # ----------------------------------------------------------------------
+        # calcul des centroides des glomeruli / aux prédictions de la layer 1
+        # ----------------------------------------------------------------------
+        self.centroid_list = _get_centroids(layer1_path, image_id, self.width, self.height, self.size)
+
+        def get_next(self):
+            for cX, cY in self.centroid_list:
+                sub_image, _ = self.image_loader[(cX - self.size // 2, cY - self.size // 2)]
+                if server == 'local':
+                    sub_mask = self.original_mask[
+                               cY - self.size // 2: cY + self.size // 2,
+                               cX - self.size // 2: cX + self.size // 2]
+                    tile_mask = np.copy(sub_mask)
+                else:
+                    tile_mask = None
+
+                coord = [cX, cY, 1]
+                tile_image = np.copy(sub_image)
+
+                tile_image = np.stack(tile_image)[..., ::-1]
+                tile_image = np.ascontiguousarray(tile_image.transpose(0, 3, 1, 2))
+                tile_image = tile_image.astype(np.float32) / 255   # N_tiles x Colors x tile_x x tile_y
+
+                if server == 'local':
+                    tile_mask = np.ascontiguousarray(tile_mask)
+                    tile_mask = tile_mask.astype(np.float32) / 255  # N_tiles x Colors x tile_x x tile_y
+
+            yield {
+                'image_small': None,
+                'mask_small': None,
+                'tile_image': tile_image,
+                'tile_mask': tile_mask,
+                'coord': coord,
+                'reject': None,
+                'height': self.height,
+                'width':  self.width,
+            }
+
+
 def layer2_tiling(image,
                   mask=None,
                   scale=0.25,
@@ -277,7 +335,6 @@ def extract_tiles_from_predictions(id, tile_size, layer1_path, server):
         image_loader = HuBMAPDataset(raw_data_dir + '/train/%s.tiff' % id, sz=tile_size)
         mask_file = raw_data_dir + '/train/%s.mask.png' % id
         original_mask = read_mask(mask_file)
-        # print(original_mask)
     else:
         image_loader = HuBMAPDataset(raw_data_dir + '/test/%s.tiff' % id, sz=tile_size)
 
@@ -408,8 +465,10 @@ def submit(sha, server, iterations, fold, flip_predict, checkpoint_sha, layer1):
         _checkpoint_dir = out_dir + f"/checkpoint_{sha}/"
 
     # --------------------------------------------------------------
-    # Verifie les checkpoints à utiliser pour l'inférence
-    # either 'all' or INTEGER (= nb iterations)
+    # Verifie les checkpoints à utiliser pour l'inférence:
+    # - 'all'
+    # - 'topN' avec N entier
+    # - INTEGER (= nb iterations)
     # --------------------------------------------------------------
     if iterations == 'all':
         iter_tag = 'all'
@@ -442,7 +501,7 @@ def submit(sha, server, iterations, fold, flip_predict, checkpoint_sha, layer1):
     print(f"submit with server={server}")
 
     # ------------------------------------------------------
-    # Get checklpoint of the model used to make predictions
+    # Get checkpoint of the model used to make predictions
     # ------------------------------------------------------
     if checkpoint_sha is None:
         tag = ''
@@ -462,7 +521,9 @@ def submit(sha, server, iterations, fold, flip_predict, checkpoint_sha, layer1):
     log.open(out_dir + f'/log.submit_{sha}.txt', mode='a')
     log.write('\n--- [START %s] %s\n\n' % (IDENTIFIER, '-' * 64))
 
-    #---
+    ##########################################################################################
+    # Get the IDs of the images --------------------------------------------------------------
+    ##########################################################################################
     if server == 'local':
         valid_image_id = make_image_id('train-all')
     if server == 'kaggle':
@@ -501,23 +562,27 @@ def submit(sha, server, iterations, fold, flip_predict, checkpoint_sha, layer1):
         ###############
         # Define tiles
         ###############
-        tile = layer2_tiling(id, mask, tile_scale, tile_size, tile_average_step, tile_min_score, layer1, server)
-        tile_image = tile['tile_image']
-        tile_centroids = tile['coord']
-        tile_image = np.stack(tile_image)[..., ::-1]
-        tile_image = np.ascontiguousarray(tile_image.transpose(0, 3, 1, 2))
-        tile_image = tile_image.astype(np.float32) / 255   # N_tiles x Colors x tile_x x tile_y
+        # tile = layer2_tiling(id, mask, tile_scale, tile_size, tile_average_step, tile_min_score, layer1, server)
 
-        if server == 'local':
-            tile_mask = tile['tile_mask']
-            tile_mask = np.ascontiguousarray(tile_mask)
-            tile_mask = tile_mask.astype(np.float32) / 255  # N_tiles x Colors x tile_x x tile_y
+        tiles = tile_generator(image_id=id, mask=mask, tile_size=320, layer1_path=layer1, server=server)
+
+        # tile_image = tile['tile_image']
+        # tile_centroids = tile['coord']
+        # tile_image = np.stack(tile_image)[..., ::-1]
+        # tile_image = np.ascontiguousarray(tile_image.transpose(0, 3, 1, 2))
+        # tile_image = tile_image.astype(np.float32) / 255   # N_tiles x Colors x tile_x x tile_y
+
+        # if server == 'local':
+        #     tile_mask = tile['tile_mask']
+        #     tile_mask = np.ascontiguousarray(tile_mask)
+        #     tile_mask = tile_mask.astype(np.float32) / 255  # N_tiles x Colors x tile_x x tile_y
 
         print(30 * '-')
-        print("tile matrix shape:", tile_image.shape)
+        height = tiles.height
+        width = tiles.width
+        print(f"tile matrix shape: {height} x {width}")
 
-        height = tile['height']
-        width = tile['width']
+        sys.exit()
 
         #######################################
         # Iterates over models.
