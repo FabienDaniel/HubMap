@@ -167,7 +167,7 @@ def to_mask(tile, coord, height, width, scale, size, step, min_score, aggregate=
 
     # print(sys.getsizeof(tile) * 1e-6, 'Mb')
 
-    print('Creating mask from tiles')
+    print('\nCreating mask from tiles')
 
     if 'mean' in aggregate:
         w = np.ones((size, size), np.float32)
@@ -184,7 +184,10 @@ def to_mask(tile, coord, height, width, scale, size, step, min_score, aggregate=
 
         #--------------
         count = np.zeros((height, width), np.float32)
-        for t, (cx, cy, cv) in enumerate(coord):
+
+        print(len(tile))
+
+        for t, (cx, cy) in enumerate(coord):
             mask [cy - half:cy + half, cx - half:cx + half] += tile[t] * w
             count[cy - half:cy + half, cx - half:cx + half] += w
 
@@ -213,7 +216,7 @@ def to_mask(tile, coord, height, width, scale, size, step, min_score, aggregate=
 
 
     if aggregate == 'max':
-        for t, (cx, cy, cv) in enumerate(coord):
+        for t, (cx, cy) in enumerate(coord):
             mask[cy - half:cy + half, cx - half:cx + half] = np.maximum(
                 mask[cy - half:cy + half, cx - half:cx + half],
                 tile[t]
