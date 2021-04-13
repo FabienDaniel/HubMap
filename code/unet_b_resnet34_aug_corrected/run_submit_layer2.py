@@ -418,9 +418,11 @@ def result_bookeeping(id, tile_probability, overall_probabilities,
             thickness=3
         )
 
-    # print(x0, y0)
-    dice = np_dice_score_optimized(proba, truth)
-    # tile_scores.append([id, f'y{y0}_x{x0}.png', x0, y0, dice])
+    if server == 'local':
+        dice = np_dice_score_optimized(proba, truth)
+    else:
+        dice = None
+
 
 
     image_show_norm('overlay2',
