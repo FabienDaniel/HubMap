@@ -52,9 +52,11 @@ class CenteredHuDataset(Dataset):
     """ Considère des images centrées sur les glomureli.
         Les images sont extraites à partir des masques et en utilisant les FP des modèles.
     """
-    def __init__(self, image_id, from_mask_image_dir, false_positive_image_dir, augment=None, logger=None):
+    def __init__(self, image_id, image_size, from_mask_image_dir,
+                 false_positive_image_dir, augment=None, logger=None):
         self.augment = augment
         self.image_id = image_id
+        self.image_size = image_size
         self.from_mask_image_dir = from_mask_image_dir
         self.false_positive_image_dir = false_positive_image_dir
 
@@ -123,13 +125,14 @@ class CenteredHuDataset(Dataset):
 
         # print('/tile/%s.png'%(id))
 
-        image = cv2.imread(data_dir + '%s.png'%(id), cv2.IMREAD_COLOR)
-        mask  = cv2.imread(data_dir + '%s.mask.png'%(id), cv2.IMREAD_GRAYSCALE)
+        image = cv2.imread(data_dir + '%s.png' % id, cv2.IMREAD_COLOR)
+        mask  = cv2.imread(data_dir + '%s.mask.png' % id, cv2.IMREAD_GRAYSCALE)
         #print(data_dir + '/tile/%s/%s.png'%(self.image_dir,id))
 
         image = image.astype(np.float32) / 255
         mask  = mask.astype(np.float32) / 255
         r = {
+            'image_size': self.image_size,
             'index' : index,
             'tile_id' : id,
             'mask' : mask,
@@ -221,14 +224,15 @@ def null_collate(batch):
     }
 
 
-image_size = 380  # for L2 training
-# image_size = 256  # for L2 training
+# image_size = 380  # for L2 training
+# image_size = 256  # for L1 training
 
 
 def train_augment(record):
 
     verbose = record.get('verbose', False)
 
+    image_size = record['image_size']
     image = record['image']
     mask = record['mask']
 
@@ -265,6 +269,7 @@ def augment(image, mask):
 
 def run_check_augment():
 
+    image_size = 256
     dataset = HuDataset(
         image_id  = [make_image_id('train', [0])],
         image_dir = ['0.25_320_train'],
@@ -284,6 +289,7 @@ def run_check_augment():
         for i in range(100):
             print(70 * '-')
             image1, mask1 = train_augment({
+                'image_size': image_size,
                 'image': image.copy(),
                 'mask' : mask.copy(),
                 'verbose': True

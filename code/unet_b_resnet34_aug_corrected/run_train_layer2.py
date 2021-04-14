@@ -129,7 +129,9 @@ def run_train(show_valid_images=False,
               sha='',
               fold=None,
               loss_type='bce',
-              tile_size=320,
+              tile_size=320,       # overall size of the input images
+              image_size=320,  # overall size of the input images
+              tile_scale=1,
               *args,
               **kwargs
               ):
@@ -164,11 +166,12 @@ def run_train(show_valid_images=False,
 
     train_dataset = CenteredHuDataset(
         image_id                 = make_image_id('train', fold),
-        from_mask_image_dir      = f'mask_{tile_size}_centroids',
+        image_size               = image_size,
+        from_mask_image_dir      = f'mask_{tile_size}_{tile_scale}_centroids',
         false_positive_image_dir = [
-            'predictions_4707bcbcf_700_centroids',
-            'predictions_18924a797_700_centroids',
-            'predictions_680598dcf_top3-587bbaf61-mean_700_centroids',
+            # f'predictions_4707bcbcf_{tile_size}_{tile_scale}_centroids',
+            f'predictions_18924a797_{tile_size}_{tile_scale}_centroids',
+            f'predictions_680598dcf_top3-587bbaf61-mean_{tile_size}_{tile_scale}_centroids',
         ],
         augment                  = train_augment,
         logger                   = log
@@ -186,8 +189,13 @@ def run_train(show_valid_images=False,
     log.write(30*'-' + '\n' + '*** VALID dataset setting ***\n' + 30*'-' + '\n')
     valid_dataset = CenteredHuDataset(
         image_id                 = make_image_id('valid', fold),
-        from_mask_image_dir      = f'mask_{tile_size}_centroids',
-        false_positive_image_dir = ['predictions_4707bcbcf_700_centroids'],
+        image_size               = image_size,
+        from_mask_image_dir      = f'mask_{tile_size}_{tile_scale}_centroids',
+        false_positive_image_dir = [
+            # f'predictions_4707bcbcf_{tile_size}_{tile_scale}_centroids',
+            f'predictions_18924a797_{tile_size}_{tile_scale}_centroids',
+            f'predictions_680598dcf_top3-587bbaf61-mean_{tile_size}_{tile_scale}_centroids',
+        ],
         augment                  = train_augment,
         logger                   = log
     )
@@ -490,7 +498,8 @@ if __name__ == '__main__':
             iter_save         = 250,
             first_iter_save   = 0,
             loss_type         = "weighted_bce",
-            tile_scale        = 0.25,
-            tile_size         = 700
+            tile_scale        = 0.5,
+            tile_size         = 700,
+            image_size        = 380
         )
 
