@@ -167,7 +167,7 @@ def to_mask(tile, coord, height, width, scale, size, step, min_score, aggregate=
 
     # print(sys.getsizeof(tile) * 1e-6, 'Mb')
 
-    print('\nCreating mask from tiles')
+    print(f'\nCreating mask w={width} x h={height} from tiles')
 
     if 'mean' in aggregate:
         w = np.ones((size, size), np.float32)
@@ -188,10 +188,13 @@ def to_mask(tile, coord, height, width, scale, size, step, min_score, aggregate=
         print(len(tile))
 
         for t, (cx, cy) in enumerate(coord):
+
+            # print(cx, cy, half, tile[t].shape, w.shape)
+
             mask [cy - half:cy + half, cx - half:cx + half] += tile[t] * w
             count[cy - half:cy + half, cx - half:cx + half] += w
 
-            print(f"{t} / {len(coord)}", sys.getsizeof(mask) * 1e-6, 'Mb', sys.getsizeof(mask) * 1e-6, 'Mb', end='\r')
+            # print(f"{t} / {len(coord)}", sys.getsizeof(mask) * 1e-6, 'Mb', sys.getsizeof(mask) * 1e-6, 'Mb', end='\r')
 
 
             # see unet paper for "Overlap-tile strategy for seamless segmentation of arbitrary large images"

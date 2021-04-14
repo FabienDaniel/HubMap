@@ -59,14 +59,14 @@ def mask_to_csv(image_id, submit_dir):
     return df
 
 
-def get_images(server, id):
+def get_images(server, id, scale=1):
     if server == 'local':
         _tag = 'train'
     elif server == 'kaggle':
         _tag = 'test'
-    image_file = raw_data_dir + f"/{_tag}/{id}.tiff"
-    json_file = raw_data_dir + f"/{_tag}/{id}-anatomical-structure.json"
-    image = read_tiff(image_file)
+    # image_file = raw_data_dir + f"/{_tag}/{id}.tiff"
+    # json_file = raw_data_dir + f"/{_tag}/{id}-anatomical-structure.json"
+    # image = read_tiff(image_file)
 
     if server == 'local':
         mask_file = raw_data_dir + f"/{_tag}/{id}.mask.png"
@@ -74,7 +74,7 @@ def get_images(server, id):
     elif server == 'kaggle':
         mask = None
 
-    return image, mask, json_file
+    return None, mask, None
 
 
 def get_probas(net, tile_image, flip_predict):
@@ -100,27 +100,37 @@ def get_probas(net, tile_image, flip_predict):
 class tile_generator:
     """ Reads an image and creates a generator to load sub-images
     """
-    def __init__(self, image_id, mask=None, size=320, layer1_path=None, server=None):
-        self.size = size
+    def __init__(self, image_id, size=320, scale=1, layer1_path=None, server=None):
+        self.size = int(size / scale)
         self.server = server
+        self.scale = scale
 
         print(50 * '-')
         print(f"processing image: {image_id}")
 
         if server == 'local':
-            self.image_loader = HuBMAPDataset(raw_data_dir + '/train/%s.tiff' % image_id, sz=self.size)
+            self.image_loader = HuBMAPDataset(raw_data_dir + '/train/%s.tiff' % image_id,
+                                              sz=self.size, scale=scale)
             mask_file = raw_data_dir + '/train/%s.mask.png' % image_id
             self.original_mask = read_mask(mask_file)
+            # if self.scale < 1:
+            #     self.original_mask = cv2.resize(self.original_mask, dsize=None,
+            #                                     fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
         else:
-            self.image_loader = HuBMAPDataset(raw_data_dir + '/test/%s.tiff' % image_id, sz=self.size)
+            self.image_loader = HuBMAPDataset(raw_data_dir + '/test/%s.tiff' % image_id,
+                                              sz=self.size, scale=scale)
 
         self.height, self.width = self.image_loader.height, self.image_loader.width
-        print(f"image size: height={self.height} x width={self.width}")
+        print(f"image size: width={self.width} x height={self.height}")
 
         # ----------------------------------------------------------------------
         # calcul des centroides des glomeruli / aux prédictions de la layer 1
         # ----------------------------------------------------------------------
-        self.centroid_list = _get_centroids(layer1_path, image_id, self.width, self.height, self.size)
+        self.centroid_list = _get_centroids(layer1_path,
+                                            image_id,
+                                            self.width,
+                                            self.height,
+                                            self.size)
 
     def get_next(self):
         for cX, cY in self.centroid_list:
@@ -129,6 +139,10 @@ class tile_generator:
                 sub_mask = self.original_mask[
                            cY - self.size // 2: cY + self.size // 2,
                            cX - self.size // 2: cX + self.size // 2]
+
+                sub_mask = cv2.resize(sub_mask, dsize=None,
+                                      fx=self.scale, fy=self.scale, interpolation=cv2.INTER_LINEAR)
+
                 tile_mask = np.copy(sub_mask)
             else:
                 tile_mask = None
@@ -148,52 +162,23 @@ class tile_generator:
                 tile_mask = tile_mask.astype(np.float32) / 255  # tile_x x tile_y
 
             yield {
-                # 'image_small': None,
-                # 'mask_small': None,
                 'tile_image': tile_image,
                 'tile_mask': tile_mask,
                 'centroids': coord,
-                # 'reject': None,
-                # 'height': self.height,
-                # 'width':  self.width,
             }
 
 
-# def layer2_tiling(image,
-#                   mask=None,
-#                   scale=0.25,
-#                   size=320,
-#                   step=192,
-#                   min_score=0.25,
-#                   layer1_path=None,
-#                   server=None
-#                   ):
-#
-#     image_small, tile_images, tile_mask, centroids, height, width = \
-#         extract_tiles_from_predictions(image, size, layer1_path, server)
-#
-#     return {
-#         'image_small': image,
-#         'mask_small': mask,
-#         'tile_image': tile_images,
-#         'tile_mask': tile_mask,
-#         'coord': centroids,
-#         'reject': None,
-#         'height': height,
-#         'width':  width,
-#     }
-
-
 class HuBMAPDataset:
-    def __init__(self, image_path, sz=256, saturation_threshold=40):
+    def __init__(self, image_path, sz=256, scale=1, saturation_threshold=40):
 
-        self.s_th = saturation_threshold   # saturation blancking threshold
+        self.scale = scale
+        self.s_th = saturation_threshold     # saturation blancking threshold
         self.p_th = 1000 * (sz // 256) ** 2  # threshold for the minimum number of pixels
-        identity = rasterio.Affine(1, 0, 0, 0, 1, 0)
+        scale_transform = rasterio.Affine(1, 0, 0, 0, 1, 0)
 
         self.data = rasterio.open(
             os.path.join(image_path),
-            transform=identity,
+            transform=scale_transform,
             num_threads='all_cpus'
         )
         # some images have issues with their format
@@ -208,12 +193,10 @@ class HuBMAPDataset:
 
         self.width  = self.shape[1]
         self.height = self.shape[0]
-
-        self.reduce = 1
         self.sz = sz
 
         print(f"image loader for {image_path} created")
-        print(f"image size = {self.width} x {self.height}")
+        print(f"original image size = {self.width} x {self.height}")
 
     # def __len__(self):
     #     return self.n0max * self.n1max
@@ -237,9 +220,12 @@ class HuBMAPDataset:
                 img[(p00 - y0):(p01 - y0), (p10 - x0):(p11 - x0), i] = \
                     layer.read(1, window=Window.from_slices((p00, p01), (p10, p11)))
 
-        if self.reduce != 1:
-            img = cv2.resize(img, (self.sz // self.reduce, self.sz // self.reduce),
-                             interpolation=cv2.INTER_AREA)
+        if self.scale < 1:
+            img = cv2.resize(img, dsize=None,
+                             fx=self.scale, fy=self.scale, interpolation=cv2.INTER_LINEAR)
+
+            # img = cv2.resize(img, (self.sz // self.reduce, self.sz // self.reduce),
+            #                  interpolation=cv2.INTER_AREA)
 
         # print('x, y = ', x0, y0)
         # image_show_norm('overlay2',
@@ -312,57 +298,6 @@ def _get_centroids(layer1_path, image_id, width, height, image_size):
     return centroid_list
 
 
-# def extract_tiles_from_predictions(id, tile_size, layer1_path, server):
-#     image_size = tile_size
-#
-#     print(50*'-')
-#     print(f"processing image: {id}")
-#
-#     if server == 'local':
-#         image_loader = HuBMAPDataset(raw_data_dir + '/train/%s.tiff' % id, sz=tile_size)
-#         mask_file = raw_data_dir + '/train/%s.mask.png' % id
-#         original_mask = read_mask(mask_file)
-#     else:
-#         image_loader = HuBMAPDataset(raw_data_dir + '/test/%s.tiff' % id, sz=tile_size)
-#
-#     height, width = image_loader.height, image_loader.width
-#
-#     # height, width = image.shape[:2]
-#     print(f"image size: height={height} x width={width}")
-#
-#     # ----------------------------------------------------------------------
-#     # calcul des centroides des glomeruli / aux prédictions de la layer 1
-#     # ----------------------------------------------------------------------
-#     centroid_list = _get_centroids(layer1_path, id, width, height, image_size)
-#     # _tmp = centroid_list
-#     # _tmp.sort(key=lambda x: x[1])
-#     # for c  in _tmp:
-#     #     print(c)
-#     #
-#     # sys.exit()
-#
-#     # -------------------------
-#     # loop over the centroids
-#     # -------------------------
-#     tile_image = []
-#     tile_mask = []
-#     coord = []
-#
-#     for cX, cY in centroid_list:
-#         sub_image, _ = image_loader[(cX - image_size // 2, cY - image_size // 2)]
-#         if server == 'local':
-#             sub_mask = original_mask[
-#                         cY - image_size // 2: cY + image_size // 2,
-#                         cX - image_size // 2: cX + image_size // 2]
-#             tile_mask.append(np.copy(sub_mask))
-#
-#         coord.append([cX, cY, 1])
-#         tile_image.append(np.copy(sub_image))
-#
-#     image = None
-#     return image, tile_image, tile_mask, coord, height, width
-
-
 def result_bookeeping(id, tile_probability, overall_probabilities,
                       tile_mask, image, tile_centroids, server, submit_dir, save_to_disk):
 
@@ -411,6 +346,7 @@ def result_bookeeping(id, tile_probability, overall_probabilities,
         )
         if save_to_disk:
             cv2.imwrite(submit_dir + f'/{id}/y{y0}_x{x0}.png', (overlay2 * 255).astype(np.uint8))
+
         overlay2 = draw_contour_overlay(
             overlay2,
             tile_probability[:, :].astype(np.float32),
@@ -436,7 +372,7 @@ def result_bookeeping(id, tile_probability, overall_probabilities,
     return f'y{y0}_x{x0}.png', x0, y0, dice
 
 
-def submit(sha, server, iterations, fold, flip_predict, checkpoint_sha, layer1):
+def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, layer1):
 
     out_dir = project_repo + f"/result/Layer_2/fold{'_'.join(map(str, fold))}"
 
@@ -522,12 +458,12 @@ def submit(sha, server, iterations, fold, flip_predict, checkpoint_sha, layer1):
     ##########################################################################################
     tile_size = 800
     tile_average_step = 320
-    tile_scale = 0.25
+    # tile_scale = 0.25
     tile_min_score = 0.25
 
     log.write('tile_size = %d \n' % tile_size)
     log.write('tile_average_step = %d \n' % tile_average_step)
-    log.write('tile_scale = %f \n' % tile_scale)
+    log.write('tile_scale = %f \n' % scale)
     log.write('tile_min_score = %f \n' % tile_min_score)
     log.write('\n')
 
@@ -546,20 +482,25 @@ def submit(sha, server, iterations, fold, flip_predict, checkpoint_sha, layer1):
         log.write(50 * "=" + "\n")
         log.write(f"Inference for image: {id} \n")
 
-        image, mask, json_file = get_images(server, id)
+        # _, mask, _ = get_images(server, id, scale)
+        # print('mask shape:', mask.shape)
 
         ###############
         # Define tiles
         ###############
-        tiles = tile_generator(image_id=id, mask=mask, size=tile_size, layer1_path=layer1, server=server)
+        tiles = tile_generator(image_id=id, size=tile_size,
+                               scale=scale, layer1_path=layer1, server=server)
 
         print(30 * '-')
         height = tiles.height
         width = tiles.width
-        print(f"tile matrix shape: {height} x {width}")
+        print(f"tile matrix shape (without scaling): {height} x {width}")
 
         tile_probability = []
         results = []
+        ##############################################
+        ### Iterate on sub-images with scaled sizes
+        ##############################################
         for index, tile in enumerate(tiles.get_next()):
 
             print('\r %s: n°%d %s' %
@@ -597,23 +538,32 @@ def submit(sha, server, iterations, fold, flip_predict, checkpoint_sha, layer1):
                 if last_iter:
                     results.append([id, image_name, x0, y0, dice])
 
+            # if index == 2: sys.exit()
+
             _probas = np.mean(overall_probabilities, axis=0)
             tile_probability.append(_probas)
+            # print(_probas.shape)
 
         ###############################################################################
         # Concatène les sous images et recrée une image conforme à la taille initiale
         # Lors de la concaténation, les pixels sont pondérés / à la distance au centre
         # de l'image
         ###############################################################################
-        probability = to_mask(tile_probability,           # height x width
-                              tiles.centroid_list,
-                              height,
-                              width,
-                              tile_scale,
+
+        scaled_centroid_list = (np.array(tiles.centroid_list) * scale).astype(np.int).tolist()
+
+        probability = to_mask(tile_probability,           # N * scaled_height x scaled_width
+                              scaled_centroid_list,
+                              int(scale * height),
+                              int(scale * width),
+                              scale,
                               tile_size,
                               tile_average_step,
                               tile_min_score,
                               aggregate='mean')
+
+        # print(probability.shape)
+        # sys.exit()
 
         # -------------------------------------------------
         # Saves the numpy array that contains probabilities
@@ -622,12 +572,27 @@ def submit(sha, server, iterations, fold, flip_predict, checkpoint_sha, layer1):
         #--- show results ---
         if server == 'local':
             truth = tiles.original_mask.astype(np.float32) / 255
-        elif server == 'kaggle':
-            truth = np.zeros((height, width), np.float32)
+            # print("before rescaling", truth.shape)
 
+            truth = cv2.resize(truth,
+                               dsize=(int(scale * truth.shape[1]),
+                                      int(scale * truth.shape[0])),
+                               interpolation=cv2.INTER_LINEAR)
 
-        if server == 'local':
-            print("starts compute score")
+            # print(truth.shape)
+            # print(probability.shape)
+
+            # print(truth.astype(np.uint8))
+            # print((probability > 0.5).astype(np.uint8))
+            # print(truth.astype(np.uint8).max())
+            # print((probability > 0.5).astype(np.uint8).max())
+            #
+            # cv2.imwrite('mask.png', truth.astype(np.uint8) * 255)
+            # cv2.imwrite('proba.png', (probability > 0.5).astype(np.uint8) * 255)
+            # sys.exit()
+
+            # print(truth.shape)
+            # print(probability.shape)
 
             loss = np_binary_cross_entropy_loss_optimized(probability, truth)
             dice = np_dice_score_optimized(probability, truth)
@@ -646,6 +611,7 @@ def submit(sha, server, iterations, fold, flip_predict, checkpoint_sha, layer1):
             log.write('\n')
 
         elif server == 'kaggle':
+            probability = cv2.resize(probability, dsize=(width, height), interpolation=cv2.INTER_LINEAR)
             predict = (probability > 0.5).astype(np.float32)
             p = rle_encode(predict)
             predicted.append(p)
@@ -756,6 +722,7 @@ if __name__ == '__main__':
                server=args.Server,
                iterations=args.Iterations,
                fold=fold,
+               scale=0.5,
                flip_predict=args.flip,
                checkpoint_sha=args.CheckpointSha,
                layer1 = args.layer1
