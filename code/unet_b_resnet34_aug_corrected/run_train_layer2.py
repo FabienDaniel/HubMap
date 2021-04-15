@@ -5,7 +5,7 @@ import git
 
 from code.common import COMMON_STRING, DataLoader, RandomSampler, SequentialSampler, time_to_str
 from code.data_preprocessing.dataset_v2020_11_12 import HuDataset, make_image_id, null_collate, train_augment, \
-    CenteredHuDataset
+    CenteredHuDataset, data_dir
 from code.lib.utility.file import Logger
 from code.lib.training.checkpoint_bookeeping import CheckpointUpdate
 
@@ -130,7 +130,7 @@ def run_train(show_valid_images=False,
               fold=None,
               loss_type='bce',
               tile_size=320,       # overall size of the input images
-              image_size=320,  # overall size of the input images
+              image_size=320,      # overall size of the input images
               tile_scale=1,
               *args,
               **kwargs
@@ -164,15 +164,70 @@ def run_train(show_valid_images=False,
     ##################################################
     log.write(30*'-' + '\n' + '*** TRAIN dataset setting ***\n' + 30*'-' + '\n')
 
+    # -----------------------------
+    ### Create CV scheme ----------
+    # -----------------------------
+
+    true_positives_dir  = [f'mask_{tile_size}_{tile_scale}_centroids']
+    false_positives_dir = [
+        f'predictions_18924a797_{tile_size}_{tile_scale}_centroids',
+        f'predictions_680598dcf_top3-587bbaf61-mean_{tile_size}_{tile_scale}_centroids',
+    ]
+    train_image_id = {
+        0: '0486052bb',
+        1: '095bf7a1f',
+        2: '1e2425f28',
+        3: '26dc41664',
+        4: '2f6ecfcdf',
+        5: '4ef6695ce',
+        6: '54f2eec69',
+        7: '8242609fa',
+        8: 'aaa6a05cc',
+        9: 'afa5e8098',
+        10: 'b2dc8411c',
+        11: 'b9a3865fc',
+        12: 'c68fe75ea',
+        13: 'cb2d976f4',
+        14: 'e79de561c',
+    }
+    images = {k: 0 for k in train_image_id.values()}
+    true_positives = {k: 0 for k in train_image_id.values()}
+    false_positives = {k: 0 for k in train_image_id.values()}
+    train_set = {k: [] for k in train_image_id.values()}
+    val_set = {k: [] for k in train_image_id.values()}
+
+    # -----------------------------------------
+    ### Liste les chemins des différentes image
+    # -----------------------------------------
+
+
+    for id in train_image_id.values():
+
+        for i, _dataset in enumerate(true_positives_dir + false_positives_dir):
+            image_dir = f"/tile/{_dataset}/{id}/"
+            current_images = [
+                image_dir + f.strip('.mask.png')
+                for f in os.listdir(data_dir + image_dir)
+                if 'mask' in f
+            ]
+            if i == 0:
+                true_positives[id] += len(current_images)
+            else:
+                false_positives[id] += len(current_images)
+
+            images[id] += len(current_images)
+            val_size = int(len(current_images) * 0.2)
+            val_set[id] += random.sample(current_images, val_size)
+            train_set[id] += [c for c in current_images if c not in val_set[id]]
+
+        print(f"{id}: train/val = {len(train_set[id])} / {len(val_set[id])}")
+
+    print('\n True positives:', true_positives)
+    print('\n False positives:', false_positives)
+
     train_dataset = CenteredHuDataset(
-        image_id                 = make_image_id('train', fold),
+        images                   = train_set,
         image_size               = image_size,
-        from_mask_image_dir      = f'mask_{tile_size}_{tile_scale}_centroids',
-        false_positive_image_dir = [
-            # f'predictions_4707bcbcf_{tile_size}_{tile_scale}_centroids',
-            f'predictions_18924a797_{tile_size}_{tile_scale}_centroids',
-            f'predictions_680598dcf_top3-587bbaf61-mean_{tile_size}_{tile_scale}_centroids',
-        ],
         augment                  = train_augment,
         logger                   = log
     )
@@ -188,14 +243,8 @@ def run_train(show_valid_images=False,
 
     log.write(30*'-' + '\n' + '*** VALID dataset setting ***\n' + 30*'-' + '\n')
     valid_dataset = CenteredHuDataset(
-        image_id                 = make_image_id('valid', fold),
+        images                   = val_set,
         image_size               = image_size,
-        from_mask_image_dir      = f'mask_{tile_size}_{tile_scale}_centroids',
-        false_positive_image_dir = [
-            # f'predictions_4707bcbcf_{tile_size}_{tile_scale}_centroids',
-            f'predictions_18924a797_{tile_size}_{tile_scale}_centroids',
-            f'predictions_680598dcf_top3-587bbaf61-mean_{tile_size}_{tile_scale}_centroids',
-        ],
         augment                  = train_augment,
         logger                   = log
     )

@@ -52,56 +52,14 @@ class CenteredHuDataset(Dataset):
     """ Considère des images centrées sur les glomureli.
         Les images sont extraites à partir des masques et en utilisant les FP des modèles.
     """
-    def __init__(self, image_id, image_size, from_mask_image_dir,
-                 false_positive_image_dir, augment=None, logger=None):
-        self.augment = augment
-        self.image_id = image_id
+    def __init__(self, images, image_size, augment=None, logger=None):
+        self.augment    = augment
+        self.images     = images
         self.image_size = image_size
-        self.from_mask_image_dir = from_mask_image_dir
-        self.false_positive_image_dir = false_positive_image_dir
 
         tile_id = []
-        true_positive = {k: 0 for k in self.image_id}
-        false_positive = {k: 0 for k in self.image_id}
-
-        # ------------------------------------------------------
-        # lecture des images issues des masques (TRUE POSITIVES)
-        # -------------------------------------------------------
-        for id in self.image_id:
-            # df = pd.read_csv(data_dir + '/tile/%s/%s.csv' % (self.from_mask_image_dir, id))
-            # tile_id += ('%s/%s/' % (self.from_mask_image_dir, id) + df.tile_id).tolist()
-
-            image_dir = f"/tile/{self.from_mask_image_dir}/{id}/"
-
-            nb_images = len([f.strip('.mask.png') for f in os.listdir(data_dir + image_dir) if 'mask' in f])
-
-            true_positive[id] += nb_images
-
-            tile_id += [image_dir + f.strip('.mask.png') for f in
-                        os.listdir(data_dir + image_dir)
-                        if 'mask' in f]
-
-        # -----------------------------------------------
-        # lecture des images issues des faux positifs
-        # -----------------------------------------------
-        for i in range(len(self.false_positive_image_dir)):
-            for id in self.image_id:
-
-                image_dir = f"/tile/{self.false_positive_image_dir[i]}/{id}/"
-
-                nb_images = len([f.strip('.mask.png') for f in os.listdir(data_dir + image_dir) if 'mask' in f])
-
-                false_positive[id] += nb_images
-
-                tile_id += [image_dir + f.strip('.mask.png') for f in
-                            os.listdir(data_dir + image_dir)
-                            if 'mask' in f]
-
-        if logger is not None:
-            logger.write("True / False positive examples: \n")
-            for image_id in self.image_id:
-                logger.write(f"{image_id}, TP/FP = {true_positive[image_id]}, {false_positive[image_id]} \n")
-
+        for image_id, image_path in self.images.items():
+            tile_id += image_path
 
         self.tile_id = tile_id
         self.len = len(self.tile_id)
@@ -113,10 +71,10 @@ class CenteredHuDataset(Dataset):
     def __str__(self):
         string  = ''
         string += '\t len       = %d \n' % len(self)
-        string += '\t TP image_dir = %s \n' % self.from_mask_image_dir
-        string += '\t FP image_dir = %s \n' % self.false_positive_image_dir
-        string += '\t image_id  = %s \n' % str(self.image_id)
-        string += '\t           = %d \n' % sum(len(i) for i in self.image_id)
+        # string += '\t TP image_dir = %s \n' % self.from_mask_image_dir
+        # string += '\t FP image_dir = %s \n' % self.false_positive_image_dir
+        # string += '\t image_id  = %s \n' % str(self.image_id)
+        # string += '\t           = %d \n' % sum(len(i) for i in self.image_id)
         return string
 
 

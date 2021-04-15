@@ -579,21 +579,6 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
                                       int(scale * truth.shape[0])),
                                interpolation=cv2.INTER_LINEAR)
 
-            # print(truth.shape)
-            # print(probability.shape)
-
-            # print(truth.astype(np.uint8))
-            # print((probability > 0.5).astype(np.uint8))
-            # print(truth.astype(np.uint8).max())
-            # print((probability > 0.5).astype(np.uint8).max())
-            #
-            # cv2.imwrite('mask.png', truth.astype(np.uint8) * 255)
-            # cv2.imwrite('proba.png', (probability > 0.5).astype(np.uint8) * 255)
-            # sys.exit()
-
-            # print(truth.shape)
-            # print(probability.shape)
-
             loss = np_binary_cross_entropy_loss_optimized(probability, truth)
             dice = np_dice_score_optimized(probability, truth)
             tp, tn = np_accuracy_optimized(probability, truth)
