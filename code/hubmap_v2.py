@@ -1,13 +1,26 @@
+import PIL
+import cv2
+import numpy as np
+import pandas as pd
 from PIL import Image
+
 Image.MAX_IMAGE_PIXELS = None
 
-from code.common import *
-import tifffile as tiff
+# from code.common import *
+from code.lib.utility.draw import image_show_norm
 import json
 
-project_repo = '/home/fabien/Kaggle/HuBMAP/HengCherKeng/2020-12-11'
-raw_data_dir = '/home/fabien/Kaggle/HuBMAP/input/'
-data_dir = project_repo + '/data'
+
+def get_data_path(server):
+    if server == 'local':
+        project_repo = '/home/fabien/Kaggle/HuBMAP/HengCherKeng/2020-12-11'
+        raw_data_dir = '/home/fabien/Kaggle/HuBMAP/input/'
+        data_dir = project_repo + '/data'
+    elif server == 'kaggle':
+        project_repo = None
+        raw_data_dir = None
+        data_dir = None
+    return project_repo, raw_data_dir, data_dir
 
 
 def read_mask(mask_file):
@@ -21,29 +34,13 @@ def read_json_as_df(json_file):
    df = pd.json_normalize(j)
    return df
 
-'''
-'/%s-anatomical-structure.csv'%id
-
-df.columns
-Index(['type', 'id', 'geometry.type', 'geometry.coordinates',
-       'properties.classification.name', 'properties.classification.colorRGB',
-       'properties.isLocked', 'properties.measurements'],
-      dtype='object')
-
-
-Cortex
-Outer Stripe
-Inner medulla
-Outer Medulla
-
-'''
 
 
 def draw_strcuture(df, height, width, fill=255, structure=[]):
     mask = np.zeros((height, width), np.uint8)
     for row in df.values:
-        type  = row[2]  #geometry.type
-        coord = row[3]  # geometry.coordinates
+        type  = row[2]   # geometry.type
+        coord = row[3]   # geometry.coordinates
         name  = row[4]   # properties.classification.name
 
         if structure !=[]:
@@ -62,6 +59,7 @@ def draw_strcuture(df, height, width, fill=255, structure=[]):
 
     return mask
 
+
 def draw_strcuture_from_hue(image, fill=255, scale=1/32):
 
     height, width, _ = image.shape
@@ -76,6 +74,7 @@ def draw_strcuture_from_hue(image, fill=255, scale=1/32):
     mask = cv2.resize(mask, dsize=(width, height), interpolation=cv2.INTER_LINEAR)
 
     return mask
+
 
 # --- rle ---------------------------------
 def rle_decode(rle, height, width , fill=255):
@@ -97,63 +96,6 @@ def rle_encode(mask):
     run[1::2] -= run[::2]
     rle =  ' '.join(str(r) for r in run)
     return rle
-
-
-# --- tile ---------------------------------
-# def to_tile(image, mask, structure, scale, size, step, min_score):
-#
-#     half = size//2
-#     image_small = cv2.resize(image, dsize=None, fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
-#     height, width, _ = image_small.shape
-#
-#     #make score
-#     structure_small = cv2.resize(structure, dsize=None, fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
-#     vv = structure_small.astype(np.float32)/255
-#
-#
-#     #make coord
-#     xx = np.linspace(half, width  - half, int(np.ceil((width  - size) / step)))
-#     yy = np.linspace(half, height - half, int(np.ceil((height - size) / step)))
-#     xx = [int(x) for x in xx]
-#     yy = [int(y) for y in yy]
-#
-#     coord  = []
-#     reject = []
-#     for cy in yy:
-#         for cx in xx:
-#             cv = vv[cy - half:cy + half, cx - half:cx + half].mean()
-#             if cv>min_score:
-#                 coord.append([cx,cy,cv])
-#             else:
-#                 reject.append([cx,cy,cv])
-#     #-----
-#     if 1:
-#         tile_image = []
-#         for cx,cy,cv in coord:
-#             t = image_small[cy - half:cy + half, cx - half:cx + half]
-#             assert (t.shape == (size, size, 3))
-#             tile_image.append(t)
-#
-#     if mask is not None:
-#         mask_small = cv2.resize(mask, dsize=None, fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
-#         tile_mask = []
-#         for cx,cy,cv in coord:
-#             t = mask_small[cy - half:cy + half, cx - half:cx + half]
-#             assert (t.shape == (size, size))
-#             tile_mask.append(t)
-#     else:
-#         mask_small = None
-#         tile_mask  = None
-#
-#     return {
-#         'image_small': image_small,
-#         'mask_small' : mask_small,
-#         'structure_small' : structure_small,
-#         'tile_image' : tile_image,
-#         'tile_mask'  : tile_mask,
-#         'coord'  : coord,
-#         'reject' : reject,
-#     }
 
 
 def to_mask(tile, coord, height, width, scale, size, step, min_score, aggregate='mean'):
@@ -228,8 +170,6 @@ def to_mask(tile, coord, height, width, scale, size, step, min_score, aggregate=
     return mask
 
 
-
-
 # --draw ------------------------------------------
 def mask_to_inner_contour(mask):
     mask = mask>0.5
@@ -253,8 +193,8 @@ def draw_contour_overlay(image, mask, color=(0, 0, 255), thickness=1):
             cv2.circle(image, (x, y), r, color, lineType=cv2.LINE_4)
     return image
 
-#-- tools ---
 
+#-- tools ---
 ##################################################################
 def run_check_tile():
     tile_scale = 0.25
@@ -279,7 +219,7 @@ def run_check_tile():
 
         #load mask
         df = pd.read_csv(data_dir + '/train.csv', index_col='id')
-        encoding = df.loc[id,'encoding']
+        encoding = df.loc[id, 'encoding']
         mask = rle_decode(encoding, height, width, 255)
 
         #load structure
@@ -299,11 +239,11 @@ def run_check_tile():
 
         if 1: #debug
             overlay = tile['image_small'].copy()
-            for cx,cy,cv in tile['coord']:
+            for cx, cy, cv in tile['coord']:
                 cv = int(255 * cv)
                 cv2.circle(overlay, (cx, cy), 64, [cv,cv,cv], -1)
                 cv2.circle(overlay, (cx, cy), 64, [0, 0, 255], 16)
-            for cx,cy,cv in tile['reject']:
+            for cx, cy, cv in tile['reject']:
                 cv = int(255 * cv)
                 cv2.circle(overlay, (cx, cy), 64, [cv,cv,cv], -1)
                 cv2.circle(overlay, (cx, cy), 64, [255, 0, 0], 16)
@@ -311,7 +251,11 @@ def run_check_tile():
             #---
             num = len(tile['coord'])
             cx, cy, cv = tile['coord'][num//2]
-            cv2.rectangle(overlay,(cx-tile_size//2,cy-tile_size//2),(cx+tile_size//2,cy+tile_size//2), (0,0,255), 16)
+            cv2.rectangle(overlay,
+                          (cx-tile_size//2, cy-tile_size//2),
+                          (cx+tile_size//2, cy+tile_size//2),
+                          (0, 0, 255),
+                          16)
 
             image_show('image_small', tile['image_small'], resize=0.1)
             image_show('overlay', overlay, resize=0.1)

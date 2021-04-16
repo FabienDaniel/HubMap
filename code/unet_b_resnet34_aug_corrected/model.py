@@ -1,15 +1,16 @@
-
-from code.common import *
-import torch
+# from code.lib.net.lovasz_loss import *
+import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
+# from torch.nn.utils.rnn import *
 
 from code.unet_b_resnet34_aug_corrected.b_resnet34 import *
-#from lovasz import _lovasz_softmax
-# https://discourse.aicrowd.com/t/explainer-pytorch-starter-0-857-f1-score-on-public-lb/3790
 
+def seed_torch(seed):
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    return seed
 
-from code.lib.net.lovasz_loss import *
 
 #------------------------------------
 def np_binary_cross_entropy_loss(probability, mask):

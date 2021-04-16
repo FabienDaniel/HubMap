@@ -1,12 +1,12 @@
-#from lib.include import *
-import os
-import pickle
-import sys
-import pandas as pd
-import shutil
 
 import builtins
-import re
+import os
+import pickle
+import shutil
+import sys
+
+import pandas as pd
+
 
 class Struct(object):
     def __init__(self, is_copy=False, **kwargs):
@@ -41,7 +41,6 @@ class Struct(object):
         for k,v in self.__dict__.items():
             text += '\t%s : %s\n'%(k, str(v))
         return text
-
 
 
 # log ------------------------------------

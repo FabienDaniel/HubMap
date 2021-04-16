@@ -24,6 +24,7 @@ def image_show_norm(name, image, min=None, max=None, resize=1):
     cv2.imshow(name, (np.clip((image-min)/(max-min),0,1)*255).astype(np.uint8))
     cv2.resizeWindow(name, round(resize*W), round(resize*H))
 
+
 def draw_shadow_text(img, text, pt,  fontScale, color, thickness, color1=None, thickness1=None):
     if color1 is None: color1=(0,0,0)
     if thickness1 is None: thickness1 = thickness+2

@@ -1,80 +1,45 @@
-#  python -m code.unet_b_resnet34_aug_corrected.run_submit_layer2 -f "6 9 10" -i all -s local
-#  -l 'result/Baseline/fold1_8_14/predictions_4707bcbcf/local-00007500_model-mean'
-
 import argparse
 import os
 import sys
-
-import imutils
-import rasterio
-import torch
-from torch.nn.parallel.data_parallel import data_parallel
-
-from rasterio.windows import Window
-
-from code.data_preprocessing.dataset import read_tiff, to_tile
-from code.data_preprocessing.dataset_v2020_11_12 import make_image_id, draw_strcuture, read_json_as_df, read_mask, \
-    to_mask, draw_contour_overlay, image_show_norm
-from code.hubmap_v2 import data_dir, rle_encode, project_repo, raw_data_dir
-from code.lib.include import IDENTIFIER
-from code.lib.utility.file import Logger, time_to_str
-from code.unet_b_resnet34_aug_corrected.model import Net, \
-    np_binary_cross_entropy_loss_optimized, np_dice_score_optimized, np_accuracy_optimized, np_dice_score
-from timeit import default_timer as timer
 from pathlib import Path
-
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-
+from timeit import default_timer as timer
 from PIL import Image
 import git
 import PIL
 import numpy as np
 import cv2
 import pandas as pd
+import imutils
+import rasterio
+import torch
+from rasterio.windows import Window
+from torch.nn.parallel.data_parallel import data_parallel
 
+SERVER_RUN = 'local'
+
+
+if SERVER_RUN == 'local':
+    from code.data_preprocessing.dataset_v2020_11_12 import make_image_id, \
+        draw_contour_overlay, image_show_norm
+    from code.hubmap_v2 import rle_encode, get_data_path, read_mask, to_mask
+    from code.lib.include import IDENTIFIER
+    from code.lib.utility.file import Logger, time_to_str
+    from code.unet_b_resnet34_aug_corrected.model import Net, \
+        np_binary_cross_entropy_loss_optimized, np_dice_score_optimized, np_accuracy_optimized
+
+elif SERVER_RUN == 'kaggle':
+    from code.data_preprocessing.dataset_v2020_11_12 import make_image_id
+    from code.hubmap_v2 import rle_encode, get_data_path, read_mask, to_mask
+    from code.lib.include import IDENTIFIER
+    from code.lib.utility.file import Logger, time_to_str
+    from code.unet_b_resnet34_aug_corrected.model import Net, \
+        np_binary_cross_entropy_loss_optimized, np_dice_score_optimized, np_accuracy_optimized
+
+
+
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 Image.MAX_IMAGE_PIXELS = None
-
 is_mixed_precision = False
-
-
-def mask_to_csv(image_id, submit_dir):
-
-    predicted = []
-    for id in image_id:
-        image_file = raw_data_dir + '/test/%s.tiff' % id
-        image = read_tiff(image_file)
-
-        height, width = image.shape[:2]
-        predict_file = submit_dir + '/%s.predict.png' % id
-        predict = np.array(PIL.Image.open(predict_file))
-        predict = cv2.resize(predict, dsize=(width, height), interpolation=cv2.INTER_LINEAR)
-        predict = (predict > 128).astype(np.uint8) * 255
-
-        p = rle_encode(predict)
-        predicted.append(p)
-
-    df = pd.DataFrame()
-    df['id'] = image_id
-    df['predicted'] = predicted
-    return df
-
-
-def get_images(server, id, scale=1):
-    if server == 'local':
-        _tag = 'train'
-    elif server == 'kaggle':
-        _tag = 'test'
-    # image_file = raw_data_dir + f"/{_tag}/{id}.tiff"
-    # json_file = raw_data_dir + f"/{_tag}/{id}-anatomical-structure.json"
-    # image = read_tiff(image_file)
-
-    if server == 'local':
-        mask_file = raw_data_dir + f"/{_tag}/{id}.mask.png"
-        mask = read_mask(mask_file)
-    elif server == 'kaggle':
-        mask = None
-
-    return None, mask, None
 
 
 def get_probas(net, tile_image, flip_predict):
@@ -97,10 +62,10 @@ def get_probas(net, tile_image, flip_predict):
     return p.data.cpu().numpy()
 
 
-class tile_generator:
+class TileGenerator:
     """ Reads an image and creates a generator to load sub-images
     """
-    def __init__(self, image_id, size=320, scale=1, layer1_path=None, server=None):
+    def __init__(self, image_id, raw_data_dir, size=320, scale=1, layer1_path=None, server=None):
         self.size = int(size / scale)
         self.server = server
         self.scale = scale
@@ -374,13 +339,18 @@ def result_bookeeping(id, tile_probability, overall_probabilities,
 
 def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, layer1):
 
-    out_dir = project_repo + f"/result/Layer_2/fold{'_'.join(map(str, fold))}"
+    project_repo, raw_data_dir, data_dir = get_data_path(SERVER_RUN)
+
+    if SERVER_RUN == 'kaggle':
+        out_dir = project_repo + f"/result/Layer_2/fold{'_'.join(map(str, fold))}"
+    else:
+        out_dir = project_repo + f"/result/Layer_2/fold{'_'.join(map(str, fold))}"
 
     # --------------------------------------------------------------
     # Verifie le sha1 du modèle à utiliser pour faire l'inférence
     # Le commit courant est utilisé si non spécifié
     # --------------------------------------------------------------
-    if checkpoint_sha is not None:
+    if checkpoint_sha is not None or SERVER_RUN == 'kaggle':
         print("Checkpoint for current inference:", checkpoint_sha)
         _sha = checkpoint_sha
         _checkpoint_dir = out_dir + f"/checkpoint_{checkpoint_sha}/"
@@ -482,13 +452,11 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
         log.write(50 * "=" + "\n")
         log.write(f"Inference for image: {id} \n")
 
-        # _, mask, _ = get_images(server, id, scale)
-        # print('mask shape:', mask.shape)
 
         ###############
         # Define tiles
         ###############
-        tiles = tile_generator(image_id=id, size=tile_size,
+        tiles = TileGenerator(image_id=id, raw_data_dir=raw_data_dir, size=tile_size,
                                scale=scale, layer1_path=layer1, server=server)
 
         print(30 * '-')
@@ -524,19 +492,21 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
                 # Sauvegarde + visualisation de l'image courante
                 ################################################################
                 last_iter = _num == len(initial_checkpoint) - 1
-                image_name, x0, y0, dice = result_bookeeping(
-                    id,
-                    image_probability,
-                    overall_probabilities,
-                    tile['tile_mask'],
-                    tile['tile_image'],
-                    tile['centroids'],
-                    server,
-                    submit_dir,
-                    save_to_disk = last_iter
-                )
-                if last_iter:
-                    results.append([id, image_name, x0, y0, dice])
+
+                if SERVER_RUN == 'local':
+                    image_name, x0, y0, dice = result_bookeeping(
+                        id,
+                        image_probability,
+                        overall_probabilities,
+                        tile['tile_mask'],
+                        tile['tile_image'],
+                        tile['centroids'],
+                        server,
+                        submit_dir,
+                        save_to_disk = last_iter
+                    )
+                    if last_iter:
+                        results.append([id, image_name, x0, y0, dice])
 
             # if index == 2: sys.exit()
 
@@ -610,106 +580,79 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
         print(df)
 
 
-
-
-
-def run_make_csv():
-
-    submit_dir = project_repo + '/result/Baseline/fold1'
-    csv_file = submit_dir + '/kaggle-00004000_model-top1.csv'
-
-    #-----
-    image_id = make_image_id('test-all')
-    predicted = []
-
-    for id in image_id:
-        print(id)
-        image_file = raw_data_dir + '/test/%s.tiff' % id
-        image = read_tiff(image_file)
-        height, width = image.shape[:2]
-        try:
-            predict_file = submit_dir + '/%s.top.png' % id
-            predict = np.array(PIL.Image.open(predict_file))
-        except:
-            predict_file = submit_dir + '/%s.predict.png' % id
-            predict = np.array(PIL.Image.open(predict_file))
-
-
-        predict = cv2.resize(predict, dsize=(width, height), interpolation=cv2.INTER_LINEAR)
-        predict = (predict > 128).astype(np.uint8)*255
-
-        p = rle_encode(predict)
-        predicted.append(p)
-
-    df = pd.DataFrame()
-    df['id'] = image_id
-    df['predicted'] = predicted
-
-    df.to_csv(csv_file, index=False)
-    print(df)
-
-
 ########################################################################
 # main #################################################################
 ########################################################################
 if __name__ == '__main__':
 
-    # Initialize parser
-    parser = argparse.ArgumentParser()
+    if SERVER_RUN == 'local':
+        # Initialize parser
+        parser = argparse.ArgumentParser()
 
-    # Adding optional argument
-    parser.add_argument("-i", "--Iterations", help="number of iterations")
-    parser.add_argument("-s", "--Server", help="run mode: server or kaggle")
-    parser.add_argument("-f", "--fold", help="fold")
-    parser.add_argument("-r", "--flip", help="flip image and merge", default=True)
-    parser.add_argument("-c", "--CheckpointSha", help="checkpoint with weights", default=None)
-    parser.add_argument("-l", "--layer1", help="predictions from first layer", default=None)
+        # Adding optional argument
+        parser.add_argument("-i", "--Iterations", help="number of iterations")
+        parser.add_argument("-s", "--Server", help="run mode: server or kaggle")
+        parser.add_argument("-f", "--fold", help="fold")
+        parser.add_argument("-r", "--flip", help="flip image and merge", default=True)
+        parser.add_argument("-c", "--CheckpointSha", help="checkpoint with weights", default=None)
+        parser.add_argument("-l", "--layer1", help="predictions from first layer", default=None)
 
-    args = parser.parse_args()
+        args = parser.parse_args()
 
-    if not args.fold:
-        print("fold missing")
-        sys.exit()
-    elif isinstance(args.fold, int):
-        fold = [int(args.fold)]
-    elif isinstance(args.fold, str):
-        fold = [int(c) for c in args.fold.split()]
-    else:
-        print("unsupported format for fold")
-        sys.exit()
+        if not args.fold:
+            print("fold missing")
+            sys.exit()
+        elif isinstance(args.fold, int):
+            fold = [int(args.fold)]
+        elif isinstance(args.fold, str):
+            fold = [int(c) for c in args.fold.split()]
+        else:
+            print("unsupported format for fold")
+            sys.exit()
 
-    if not args.layer1:
-        print("first layer predictions missing")
-        sys.exit()
+        if not args.layer1:
+            print("first layer predictions missing")
+            sys.exit()
 
-    if not args.Iterations:
-        print("iterations missing")
-        sys.exit()
+        if not args.Iterations:
+            print("iterations missing")
+            sys.exit()
 
-    if args.Server in ['kaggle', 'local']:
-        print("Server: % s" % args.Server)
-    else:
-        print("Server missing")
-        sys.exit()
+        if args.Server in ['kaggle', 'local']:
+            print("Server: % s" % args.Server)
+        else:
+            print("Server missing")
+            sys.exit()
 
-    repo = git.Repo(search_parent_directories=True)
-    model_sha = repo.head.object.hexsha[:9]
-    print(f"current commit: {model_sha}")
+        repo = git.Repo(search_parent_directories=True)
+        model_sha = repo.head.object.hexsha[:9]
+        print(f"current commit: {model_sha}")
 
-    changedFiles = [item.a_path for item in repo.index.diff(None) if item.a_path.endswith(".py")]
-    if len(changedFiles) > 0:
-        print("ABORT submission -- There are unstaged files:")
-        for _file in changedFiles:
-            print(f" * {_file}")
+        changedFiles = [item.a_path for item in repo.index.diff(None) if item.a_path.endswith(".py")]
+        if len(changedFiles) > 0:
+            print("ABORT submission -- There are unstaged files:")
+            for _file in changedFiles:
+                print(f" * {_file}")
 
-    else:
-        submit(model_sha,
-               server=args.Server,
-               iterations=args.Iterations,
-               fold=fold,
+        else:
+            submit(model_sha,
+                   server=args.Server,
+                   iterations=args.Iterations,
+                   fold=fold,
+                   scale=0.5,
+                   flip_predict=args.flip,
+                   checkpoint_sha=args.CheckpointSha,
+                   layer1 = args.layer1
+                   )
+
+    elif SERVER_RUN == 'kaggle':
+        submit('ae731b8de',
+               server='kaggle',
+               iterations='top3',
+               fold=None,
                scale=0.5,
-               flip_predict=args.flip,
-               checkpoint_sha=args.CheckpointSha,
-               layer1 = args.layer1
+               flip_predict=True,
+               checkpoint_sha='ae731b8de',
+               layer1='result/Baseline/fold6_9_10/predictions_e9b0864a1/kaggle-all-mean'
                )
 

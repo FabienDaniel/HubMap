@@ -1,8 +1,13 @@
-from code.common import *
+# from code.common import *
+import torch
 
+import torch.nn as nn
+import torch.nn.functional as F
 #https://github.com/yuhuixu1993/BNET/blob/main/classification/imagenet/models/resnet.py
 IMAGE_RGB_MEAN = [0.485, 0.456, 0.406]
 IMAGE_RGB_STD  = [0.229, 0.224, 0.225]
+
+
 class RGB(nn.Module):
     def __init__(self,):
         super(RGB, self).__init__()
@@ -14,7 +19,6 @@ class RGB(nn.Module):
     def forward(self, x):
         x = (x-self.mean)/self.std
         return x
-
 
 
 # Batch Normalization with Enhanced Linear Transformation

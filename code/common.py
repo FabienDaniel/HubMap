@@ -1,16 +1,5 @@
-# import os
-# os.environ['CUDA_VISIBLE_DEVICES']='0'
-
-from code.lib.include import *
-from code.lib.utility.draw import *
-from code.lib.utility.file import *
-
 from code.lib.include_torch import *
-from code.lib.net.rate import *
 from code.lib.net.layer_np import *
-
-
-
 
 #---------------------------------------------------------------------------------
 COMMON_STRING ='@%s:  \n' % os.path.basename(__file__)
