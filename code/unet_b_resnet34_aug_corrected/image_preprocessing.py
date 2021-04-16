@@ -7,19 +7,27 @@ import cv2
 from code.lib.include import PI
 
 
-def do_random_flip_transpose(image, mask):
-    if np.random.rand()>0.5:
-        image = cv2.flip(image,0)
-        mask = cv2.flip(mask,0)
-    if np.random.rand()>0.5:
-        image = cv2.flip(image,1)
-        mask = cv2.flip(mask,1)
-    if np.random.rand()>0.5:
-        image = image.transpose(1,0,2)
-        mask = mask.transpose(1,0)
+def do_random_flip_transpose(image, mask, verbose=False):
+    flip = []
+    if np.random.rand() > 0.5:
+        flip.append('vertical')
+        image = cv2.flip(image, 0)
+        mask = cv2.flip(mask, 0)
+    if np.random.rand() > 0.5:
+        flip.append('horizontal')
+        image = cv2.flip(image, 1)
+        mask = cv2.flip(mask, 1)
+    if np.random.rand() > 0.5:
+        flip.append('transpose')
+        image = image.transpose(1, 0, 2)
+        mask = mask.transpose(1, 0)
 
     image = np.ascontiguousarray(image)
     mask = np.ascontiguousarray(mask)
+
+    if verbose:
+        print(f"random_flip_transpose: {'|'.join(flip)}")
+
     return image, mask
 
 

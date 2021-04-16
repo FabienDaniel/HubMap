@@ -1,8 +1,14 @@
 import argparse
+import os
+import sys
 
+import albumentations as albu
+import torch
 from torch.utils.data import Dataset
 
 from code.hubmap_v2 import *
+from code.lib.include import seed_py
+from code.lib.include_torch import seed_torch
 from code.unet_b_resnet34_aug_corrected.image_preprocessing import do_random_crop, do_random_rotate_crop, \
     do_random_scale_crop, do_random_hsv, do_random_contast, do_random_gain, do_random_noise, \
     do_random_flip_transpose
@@ -54,8 +60,11 @@ class CenteredHuDataset(Dataset):
     """
     def __init__(self, images, image_size, augment=None, logger=None):
         self.augment    = augment
+        self.crop       = crop
         self.images     = images
         self.image_size = image_size
+
+        self.project_repo, self.raw_data_dir, self.data_dir = get_data_path('local')
 
         tile_id = []
         for image_id, image_path in self.images.items():
@@ -83,8 +92,8 @@ class CenteredHuDataset(Dataset):
 
         # print('/tile/%s.png'%(id))
 
-        image = cv2.imread(data_dir + '%s.png' % id, cv2.IMREAD_COLOR)
-        mask  = cv2.imread(data_dir + '%s.mask.png' % id, cv2.IMREAD_GRAYSCALE)
+        image = cv2.imread(self.data_dir + '%s.png' % id, cv2.IMREAD_COLOR)
+        mask  = cv2.imread(self.data_dir + '%s.mask.png' % id, cv2.IMREAD_GRAYSCALE)
         #print(data_dir + '/tile/%s/%s.png'%(self.image_dir,id))
 
         image = image.astype(np.float32) / 255
@@ -98,6 +107,9 @@ class CenteredHuDataset(Dataset):
         }
         if self.augment is not None:
             r = self.augment(r)
+        else:
+            r = self.crop(r)
+
 
         return r
 
@@ -108,12 +120,19 @@ class HuDataset(Dataset):
         self.image_id = image_id
         self.image_dir = image_dir
 
-        tile_id = []
-        for i in range(len(image_dir)):
-            for id in image_id[i]:
-                df = pd.read_csv(data_dir + '/tile/%s/%s.csv' % (self.image_dir[i], id))
-                tile_id += ('%s/%s/' % (self.image_dir[i], id) + df.tile_id).tolist()
+        self.project_repo, self.raw_data_dir, self.data_dir = get_data_path('local')
 
+        # print(self.data_dir)
+        # print(image_dir)
+
+        tile_id = []
+        for i, dirpath in enumerate(image_dir):
+            for id in image_id[i]:
+                for _image in os.listdir(f'{self.data_dir}/tile/{dirpath}/{id}'):
+                    if 'mask' in _image: continue
+                    tile_id.append(f"{self.image_dir[i]}/{id}/{_image.strip('.png')}")
+
+        # print(tile_id)
         self.tile_id = tile_id
         self.len =len(self.tile_id)
 
@@ -132,8 +151,9 @@ class HuDataset(Dataset):
 
     def __getitem__(self, index):
         id = self.tile_id[index]
-        image = cv2.imread(data_dir + '/tile/%s.png'%(id), cv2.IMREAD_COLOR)
-        mask  = cv2.imread(data_dir + '/tile/%s.mask.png'%(id), cv2.IMREAD_GRAYSCALE)
+        print(f'/tile/{id}.png')
+        image = cv2.imread(self.data_dir + f'/tile/{id}.png', cv2.IMREAD_COLOR)
+        mask  = cv2.imread(self.data_dir + f'/tile/{id}.mask.png', cv2.IMREAD_GRAYSCALE)
         #print(data_dir + '/tile/%s/%s.png'%(self.image_dir,id))
 
         image = image.astype(np.float32) / 255
@@ -182,8 +202,95 @@ def null_collate(batch):
     }
 
 
-# image_size = 380  # for L2 training
-# image_size = 256  # for L1 training
+def train_albu_augment(record):
+
+    verbose = record.get('verbose', False)
+    image_size = record['image_size']
+
+    image = record['image']
+    mask = record['mask']
+
+    if verbose:
+        pipeline = albu.ReplayCompose
+    else:
+        pipeline = albu.Compose
+
+    aug = pipeline([
+        albu.OneOf([
+            albu.RandomBrightnessContrast(brightness_limit = 0.2,
+                                          contrast_limit = 0.2,
+                                          brightness_by_max = True,
+                                          always_apply = False,
+                                          p = 0.7),
+            albu.RandomBrightnessContrast(brightness_limit=(-0.2, 0.6),
+                                          contrast_limit=.2,
+                                          brightness_by_max=True,
+                                          always_apply=False,
+                                          p= 0.7),
+            albu.RandomGamma(p=1)
+        ], p=0.5),
+        albu.OneOf([
+            albu.Blur(blur_limit=3, p=1),
+            albu.MedianBlur(blur_limit=3, p=1),
+            albu.Blur(blur_limit=5, p=0.7),
+            albu.MedianBlur(blur_limit=5, p=0.7)
+        ], p=.25),
+        albu.OneOf([
+            albu.GaussNoise(0.02, p=.5),
+            albu.IAAAffine(p=.5),
+        ], p=.25),
+        albu.RandomRotate90(p=.5),
+        albu.HorizontalFlip(p=.5),
+        albu.VerticalFlip(p=.5),
+        albu.RandomCrop(width=image_size, height=image_size),
+        albu.ShiftScaleRotate(p=.25)
+    ])
+
+    data = aug(image=image, mask=mask)
+    record['image'] = data['image']
+    record['mask'] = data['mask']
+
+    if verbose:
+        for transformation in data['replay']['transforms']:
+            if not isinstance(transformation, dict):
+                print('not a dict')
+                pass
+            elif transformation.get('applied', False):
+                print(30*'-')
+                if 'OneOf' in transformation['__class_fullname__']:
+                    print(30 * '=')
+                    for _trans in transformation['transforms']:
+                        if not _trans.get('applied', False): continue
+                        _name = _trans['__class_fullname__']
+                        if 'Flip' in _name: continue
+
+                        print(_trans['__class_fullname__'])
+                        for k, v in _trans.items():
+                            if k in ['__class_fullname__', 'applied', 'always_apply']: continue
+                            print(f"{k}: {v}")
+
+                else:
+                    _name = transformation['__class_fullname__']
+                    if 'Flip' in _name: continue
+                    print(_name)
+                    for k, v in transformation.items():
+                        if k in ['__class_fullname__', 'applied', 'always_apply']: continue
+                        print(f"{k}: {v}")
+
+    return record
+
+
+def crop(record):
+    image_size = record['image_size']
+    image = record['image']
+    mask = record['mask']
+    aug = albu.Compose([
+        albu.RandomCrop(width=image_size, height=image_size),
+    ])
+    data = aug(image=image, mask=mask)
+    record['image'] = data['image']
+    record['mask'] = data['mask']
+    return record
 
 
 def train_augment(record):
@@ -209,7 +316,7 @@ def train_augment(record):
         lambda image, mask: do_random_noise(image, mask, mag=0.1, verbose=verbose),
     ], 1): image, mask = fn(image, mask)
 
-    image, mask = do_random_flip_transpose(image, mask)
+    image, mask = do_random_flip_transpose(image, mask, verbose=verbose)
     record['mask'] = mask
     record['image'] = image
     return record
@@ -227,31 +334,31 @@ def augment(image, mask):
 
 def run_check_augment():
 
-    image_size = 256
+    image_size = 380
+    print("initialize dataset")
     dataset = HuDataset(
         image_id  = [make_image_id('train', [0])],
-        image_dir = ['0.25_320_train'],
+        image_dir = ['mask_700_0.5_centroids'],
     )
 
     for i in range(1000):
-    #for i in np.random.choice(len(dataset),100):
+        print(f"sample n°{i}") #, end='\r')
         r = dataset[i]
         image = r['image']
         mask  = r['mask']
 
-        print('%2d --------------------------- ' % i)
-        # overlay = np.hstack([image, np.tile(mask.reshape(*image.shape[:2], 1), (1, 1, 3)),])
         image_show_norm('overlay', image)
         cv2.waitKey(1)
 
         for i in range(100):
-            print(70 * '-')
-            image1, mask1 = train_augment({
+            print(70 * '*')
+            result = train_albu_augment({
                 'image_size': image_size,
                 'image': image.copy(),
                 'mask' : mask.copy(),
                 'verbose': True
             })
+            image1 = result['image']
             # overlay1 = np.hstack([image1, np.tile(mask1.reshape(*image1.shape[:2], 1), (1, 1, 3)),])
             image_show_norm('overlay1', image1)
             cv2.waitKey(0)
@@ -267,6 +374,9 @@ if __name__ == '__main__':
         print("mode missing")
         sys.exit()
     elif args.mode == 'augmentation':
+        seed = 37
+        seed_py(seed)
+        seed_torch(seed)
         run_check_augment()
 
 

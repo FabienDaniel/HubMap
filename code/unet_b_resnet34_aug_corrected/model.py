@@ -1,10 +1,7 @@
-# from code.lib.net.lovasz_loss import *
 import numpy as np
-import torch.nn as nn
-import torch.nn.functional as F
-# from torch.nn.utils.rnn import *
 
 from code.unet_b_resnet34_aug_corrected.b_resnet34 import *
+
 
 def seed_torch(seed):
     torch.manual_seed(seed)
@@ -12,26 +9,11 @@ def seed_torch(seed):
     return seed
 
 
-#------------------------------------
 def np_binary_cross_entropy_loss(probability, mask):
-
-    # print(probability.shape, mask.shape)
-
     p = probability.reshape(-1)
     t = mask.reshape(-1)
-
-    # print("here")
-
     loss = -t * np.log(np.clip(p, 1e-6, 1)) - (1-t) * np.log(np.clip(1-p, 1e-6, 1))
-
-    # print(loss, len(loss))
-
-    # print("-2-")
-
     loss = loss.mean()
-
-    # print("end")
-
     return loss
 
 

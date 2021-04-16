@@ -3,10 +3,10 @@ import os
 
 import git
 
-from code.common import COMMON_STRING, DataLoader, RandomSampler, SequentialSampler, time_to_str
+from code.common import COMMON_STRING, DataLoader, RandomSampler, SequentialSampler
 from code.data_preprocessing.dataset_v2020_11_12 import HuDataset, make_image_id, null_collate, train_augment, \
-    CenteredHuDataset, data_dir
-from code.lib.utility.file import Logger
+    CenteredHuDataset, train_albu_augment, get_data_path
+from code.lib.utility.file import Logger, time_to_str
 from code.lib.training.checkpoint_bookeeping import CheckpointUpdate
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
@@ -130,6 +130,8 @@ def split_dataset(train_image_id, true_positives_dir, false_positives_dir):
     train_set = {k: [] for k in train_image_id.values()}
     val_set = {k: [] for k in train_image_id.values()}
 
+    project_repo, raw_data_dir, data_dir = get_data_path('local')
+
     # -----------------------------------------
     ### Liste les chemins des différentes image
     # -----------------------------------------
@@ -231,6 +233,7 @@ def run_train(show_valid_images=False,
         f'predictions_680598dcf_top3-587bbaf61-mean_{tile_size}_{tile_scale}_centroids',
     ]
     train_set, val_set = split_dataset(
+        train_image_id=train_image_id,
         true_positives_dir  = true_positives_dir,
         false_positives_dir = false_positives_dir
     )
@@ -238,7 +241,7 @@ def run_train(show_valid_images=False,
     train_dataset = CenteredHuDataset(
         images                   = train_set,
         image_size               = image_size,
-        augment                  = train_augment,
+        augment                  = train_albu_augment,
         logger                   = log
     )
     train_loader = DataLoader(
@@ -255,7 +258,7 @@ def run_train(show_valid_images=False,
     valid_dataset = CenteredHuDataset(
         images                   = val_set,
         image_size               = image_size,
-        augment                  = train_augment,
+        augment                  = None,  # train_albu_augment,
         logger                   = log
     )
 
@@ -559,6 +562,6 @@ if __name__ == '__main__':
             loss_type         = "weighted_bce",
             tile_scale        = 0.5,
             tile_size         = 700,
-            image_size        = 380
+            image_size        = 350
         )
 

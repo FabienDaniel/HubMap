@@ -649,7 +649,7 @@ if __name__ == '__main__':
         submit('ae731b8de',
                server='kaggle',
                iterations='top3',
-               fold=None,
+               fold=[''],
                scale=0.5,
                flip_predict=True,
                checkpoint_sha='ae731b8de',
