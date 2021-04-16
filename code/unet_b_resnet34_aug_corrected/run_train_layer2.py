@@ -122,6 +122,45 @@ def get_loss(loss_type, logit, mask):
     return loss
 
 
+def split_dataset(train_image_id, true_positives_dir, false_positives_dir):
+
+    images = {k: 0 for k in train_image_id.values()}
+    true_positives = {k: 0 for k in train_image_id.values()}
+    false_positives = {k: 0 for k in train_image_id.values()}
+    train_set = {k: [] for k in train_image_id.values()}
+    val_set = {k: [] for k in train_image_id.values()}
+
+    # -----------------------------------------
+    ### Liste les chemins des différentes image
+    # -----------------------------------------
+
+    for id in train_image_id.values():
+
+        for i, _dataset in enumerate(true_positives_dir + false_positives_dir):
+            image_dir = f"/tile/{_dataset}/{id}/"
+            current_images = [
+                image_dir + f.strip('.mask.png')
+                for f in os.listdir(data_dir + image_dir)
+                if 'mask' in f
+            ]
+            if i == 0:
+                true_positives[id] += len(current_images)
+            else:
+                false_positives[id] += len(current_images)
+
+            images[id] += len(current_images)
+            val_size = int(len(current_images) * 0.2)
+            val_set[id] += random.sample(current_images, val_size)
+            train_set[id] += [c for c in current_images if c not in val_set[id]]
+
+        print(f"{id}: train/val = {len(train_set[id])} / {len(val_set[id])}")
+
+    print('\n True positives:', true_positives)
+    print('\n False positives:', false_positives)
+
+    return train_set, val_set
+
+
 ###########################################################################
 # Training of the model ---------------------------------------------------
 ###########################################################################
@@ -167,12 +206,6 @@ def run_train(show_valid_images=False,
     # -----------------------------
     ### Create CV scheme ----------
     # -----------------------------
-
-    true_positives_dir  = [f'mask_{tile_size}_{tile_scale}_centroids']
-    false_positives_dir = [
-        f'predictions_18924a797_{tile_size}_{tile_scale}_centroids',
-        f'predictions_680598dcf_top3-587bbaf61-mean_{tile_size}_{tile_scale}_centroids',
-    ]
     train_image_id = {
         0: '0486052bb',
         1: '095bf7a1f',
@@ -190,40 +223,17 @@ def run_train(show_valid_images=False,
         13: 'cb2d976f4',
         14: 'e79de561c',
     }
-    images = {k: 0 for k in train_image_id.values()}
-    true_positives = {k: 0 for k in train_image_id.values()}
-    false_positives = {k: 0 for k in train_image_id.values()}
-    train_set = {k: [] for k in train_image_id.values()}
-    val_set = {k: [] for k in train_image_id.values()}
-
-    # -----------------------------------------
-    ### Liste les chemins des différentes image
-    # -----------------------------------------
-
-
-    for id in train_image_id.values():
-
-        for i, _dataset in enumerate(true_positives_dir + false_positives_dir):
-            image_dir = f"/tile/{_dataset}/{id}/"
-            current_images = [
-                image_dir + f.strip('.mask.png')
-                for f in os.listdir(data_dir + image_dir)
-                if 'mask' in f
-            ]
-            if i == 0:
-                true_positives[id] += len(current_images)
-            else:
-                false_positives[id] += len(current_images)
-
-            images[id] += len(current_images)
-            val_size = int(len(current_images) * 0.2)
-            val_set[id] += random.sample(current_images, val_size)
-            train_set[id] += [c for c in current_images if c not in val_set[id]]
-
-        print(f"{id}: train/val = {len(train_set[id])} / {len(val_set[id])}")
-
-    print('\n True positives:', true_positives)
-    print('\n False positives:', false_positives)
+    true_positives_dir = [
+        f'mask_{tile_size}_{tile_scale}_centroids'
+    ]
+    false_positives_dir = [
+        f'predictions_18924a797_{tile_size}_{tile_scale}_centroids',
+        f'predictions_680598dcf_top3-587bbaf61-mean_{tile_size}_{tile_scale}_centroids',
+    ]
+    train_set, val_set = split_dataset(
+        true_positives_dir  = true_positives_dir,
+        false_positives_dir = false_positives_dir
+    )
 
     train_dataset = CenteredHuDataset(
         images                   = train_set,

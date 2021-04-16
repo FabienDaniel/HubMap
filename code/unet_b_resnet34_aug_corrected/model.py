@@ -14,7 +14,7 @@ from code.lib.net.lovasz_loss import *
 #------------------------------------
 def np_binary_cross_entropy_loss(probability, mask):
 
-    print(probability.shape, mask.shape)
+    # print(probability.shape, mask.shape)
 
     p = probability.reshape(-1)
     t = mask.reshape(-1)
@@ -23,7 +23,7 @@ def np_binary_cross_entropy_loss(probability, mask):
 
     loss = -t * np.log(np.clip(p, 1e-6, 1)) - (1-t) * np.log(np.clip(1-p, 1e-6, 1))
 
-    print(loss, len(loss))
+    # print(loss, len(loss))
 
     # print("-2-")
 
@@ -74,25 +74,20 @@ def np_dice_score_optimized(probability, mask):
 def np_dice_score(probability, mask):
     p = probability.reshape(-1)
     t = mask.reshape(-1)
-
-    print("here - a")
-    p = p>0.5
-    t = t>0.5
+    p = p > 0.5
+    t = t > 0.5
     uion = p.sum() + t.sum()
     overlap = (p*t).sum()
     dice = 2*overlap/(uion+0.001)
-
-    print("here - b")
-
     return dice
 
 
 def np_accuracy(probability, mask):
     p = probability.reshape(-1)
     t = mask.reshape(-1)
-    p = p>0.5
-    t = t>0.5
-    tp = (p*t).sum()/(t).sum()
+    p = p > 0.5
+    t = t > 0.5
+    tp = (p*t).sum() / t.sum()
     tn = ((1-p)*(1-t)).sum()/(1-t).sum()
     return tp, tn
 
@@ -124,7 +119,6 @@ def np_accuracy_optimized(probability, mask):
 def criterion_binary_cross_entropy(logit, mask):
     logit = logit.reshape(-1)
     mask = mask.reshape(-1)
-
     loss = F.binary_cross_entropy_with_logits(logit, mask)
     return loss
 #
@@ -142,10 +136,10 @@ def criterion_binary_cross_entropy(logit, mask):
 
 def resize_like(x, reference, mode='nearest'):
     if x.shape[2:] !=  reference.shape[2:]:
-        if mode=='bilinear':
-            x = F.interpolate(x, size=reference.shape[2:],mode='bilinear',align_corners=False)
-        if mode=='nearest':
-            x = F.interpolate(x, size=reference.shape[2:],mode='nearest')
+        if mode == 'bilinear':
+            x = F.interpolate(x, size=reference.shape[2:], mode='bilinear', align_corners=False)
+        if mode == 'nearest':
+            x = F.interpolate(x, size=reference.shape[2:], mode='nearest')
     return x
 
 
@@ -179,7 +173,7 @@ class ResDecode(nn.Module):
         super().__init__()
         self.attent1 = SqueezeExcite(in_channel)
         self.conv1 = nn.Sequential(
-            nn.Conv2d(in_channel,out_channel,kernel_size=3,padding=1,bias=False),
+            nn.Conv2d(in_channel, out_channel, kernel_size=3, padding=1, bias=False),
             EnBatchNorm2d(out_channel), #nn.BatchNorm2d(out_channel),
             nn.ReLU(inplace=True),
         )
