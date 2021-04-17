@@ -562,6 +562,6 @@ if __name__ == '__main__':
             loss_type         = "weighted_bce",
             tile_scale        = 0.5,
             tile_size         = 700,
-            image_size        = 350
+            image_size        = 380
         )
 

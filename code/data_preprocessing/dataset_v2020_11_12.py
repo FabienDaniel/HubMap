@@ -215,37 +215,40 @@ def train_albu_augment(record):
     else:
         pipeline = albu.Compose
 
+
     aug = pipeline([
         albu.OneOf([
             albu.RandomBrightnessContrast(brightness_limit = 0.2,
                                           contrast_limit = 0.2,
                                           brightness_by_max = True,
                                           always_apply = False,
-                                          p = 0.7),
+                                          p = 1),
             albu.RandomBrightnessContrast(brightness_limit=(-0.2, 0.6),
                                           contrast_limit=.2,
                                           brightness_by_max=True,
                                           always_apply=False,
-                                          p= 0.7),
+                                          p= 1),
+            albu.augmentations.transforms.ColorJitter(brightness=0.2,
+                                                      contrast=0.2,
+                                                      saturation=0.1,
+                                                      hue=0.1,
+                                                      always_apply=False,
+                                                      p=1),
             albu.RandomGamma(p=1)
-        ], p=0.5),
-        albu.OneOf([
-            albu.Blur(blur_limit=3, p=1),
-            albu.MedianBlur(blur_limit=3, p=1),
-            albu.Blur(blur_limit=5, p=0.7),
-            albu.MedianBlur(blur_limit=5, p=0.7)
-        ], p=.25),
+        ], p=1),
         albu.OneOf([
             albu.GaussNoise(0.02, p=.5),
             albu.IAAAffine(p=.5),
         ], p=.25),
+        albu.OneOf([
+            albu.augmentations.transforms.Blur(blur_limit=15, always_apply=False, p=0.25),
+            albu.augmentations.transforms.Blur(blur_limit=3, always_apply=False, p=0.5)
+        ], p=0.5),
         albu.RandomRotate90(p=.5),
         albu.HorizontalFlip(p=.5),
         albu.VerticalFlip(p=.5),
         albu.RandomCrop(width=image_size, height=image_size),
-        albu.ShiftScaleRotate(p=.25)
     ])
-
     data = aug(image=image, mask=mask)
     record['image'] = data['image']
     record['mask'] = data['mask']
@@ -285,7 +288,7 @@ def crop(record):
     image = record['image']
     mask = record['mask']
     aug = albu.Compose([
-        albu.RandomCrop(width=image_size, height=image_size),
+        albu.CenterCrop(width=image_size, height=image_size),
     ])
     data = aug(image=image, mask=mask)
     record['image'] = data['image']
@@ -358,6 +361,12 @@ def run_check_augment():
                 'mask' : mask.copy(),
                 'verbose': True
             })
+            # result = train_augment({
+            #     'image_size': image_size,
+            #     'image': image.copy(),
+            #     'mask': mask.copy(),
+            #     'verbose': True
+            # })
             image1 = result['image']
             # overlay1 = np.hstack([image1, np.tile(mask1.reshape(*image1.shape[:2], 1), (1, 1, 3)),])
             image_show_norm('overlay1', image1)
