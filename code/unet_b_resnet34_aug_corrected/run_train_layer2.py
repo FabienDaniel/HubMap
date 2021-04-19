@@ -1,11 +1,13 @@
 import argparse
 import os
+from pathlib import Path
 
 import git
 
 from code.common import COMMON_STRING, DataLoader, RandomSampler, SequentialSampler
 from code.data_preprocessing.dataset_v2020_11_12 import HuDataset, make_image_id, null_collate, train_augment, \
-    CenteredHuDataset, train_albu_augment, get_data_path
+    CenteredHuDataset, train_albu_augment, get_data_path, val_albu_augment
+from code.lib.utility.draw import image_show_norm
 from code.lib.utility.file import Logger, time_to_str
 from code.lib.training.checkpoint_bookeeping import CheckpointUpdate
 
@@ -122,7 +124,7 @@ def get_loss(loss_type, logit, mask):
     return loss
 
 
-def split_dataset(train_image_id, true_positives_dir, false_positives_dir):
+def split_dataset(sha, train_image_id, true_positives_dir, false_positives_dir):
 
     images = {k: 0 for k in train_image_id.values()}
     true_positives = {k: 0 for k in train_image_id.values()}
@@ -159,6 +161,34 @@ def split_dataset(train_image_id, true_positives_dir, false_positives_dir):
 
     print('\n True positives:', true_positives)
     print('\n False positives:', false_positives)
+
+    for image_id, images in val_set.items():
+        outdir = data_dir + f"/tile/val_aug_{sha}/"
+        Path(outdir + f'/{image_id}').mkdir(parents=True, exist_ok=True)
+        additional_data = []
+        for image_path in images:
+            # print(data_dir + image_path)
+            image = cv2.imread(data_dir + f'{image_path}.png', cv2.IMREAD_COLOR)
+            mask  = cv2.imread(data_dir + f'{image_path}.mask.png', cv2.IMREAD_GRAYSCALE)
+            result = val_albu_augment({
+                'image_size': image_size,
+                'image': image.copy(),
+                'mask': mask.copy(),
+                'verbose': False
+            })
+
+            # image_show_norm('overlay1', result['image'])
+            # cv2.waitKey(1)
+
+            _image = f"/tile/val_aug_{sha}/{image_id}/{image_path.split('/')[-1]}"
+            aug_data_path = data_dir + _image
+            cv2.imwrite(f"{aug_data_path}.png", result['image'])
+            cv2.imwrite(f"{aug_data_path}.mask.png", result["mask"])
+            additional_data.append(_image)
+
+        val_set[image_id].extend(additional_data)
+            # print(aug_data_path)
+        # sys.exit()
 
     return train_set, val_set
 
@@ -233,43 +263,48 @@ def run_train(show_valid_images=False,
         f'predictions_680598dcf_top3-587bbaf61-mean_{tile_size}_{tile_scale}_centroids',
     ]
     train_set, val_set = split_dataset(
-        train_image_id=train_image_id,
+        sha                 = sha,
+        train_image_id      = train_image_id,
         true_positives_dir  = true_positives_dir,
         false_positives_dir = false_positives_dir
     )
-
+    # ------------
+    ### TRAIN SET
+    # ------------
     train_dataset = CenteredHuDataset(
-        images                   = train_set,
-        image_size               = image_size,
-        augment                  = train_albu_augment,
-        logger                   = log
+        images      = train_set,
+        image_size  = image_size,
+        augment     = train_albu_augment,
+        logger      = log
     )
     train_loader = DataLoader(
         train_dataset,
-        sampler=RandomSampler(train_dataset),
-        batch_size=batch_size,
-        drop_last=True,
-        num_workers=8,
-        pin_memory=True,
-        collate_fn=null_collate
+        sampler     = RandomSampler(train_dataset),
+        batch_size  = batch_size,
+        drop_last   = True,
+        num_workers = 8,
+        pin_memory  = True,
+        collate_fn  = null_collate
     )
-
+    # ------------
+    ### VALID SET
+    # ------------
     log.write(30*'-' + '\n' + '*** VALID dataset setting ***\n' + 30*'-' + '\n')
     valid_dataset = CenteredHuDataset(
-        images                   = val_set,
-        image_size               = image_size,
-        augment                  = None,  # train_albu_augment,
-        logger                   = log
+        images      = val_set,
+        image_size  = image_size,
+        augment     = None,
+        logger      = log
     )
 
     valid_loader = DataLoader(
         valid_dataset,
-        sampler=SequentialSampler(valid_dataset),
-        batch_size=8,
-        drop_last=False,
-        num_workers=8,
-        pin_memory=True,
-        collate_fn=null_collate
+        sampler     = SequentialSampler(valid_dataset),
+        batch_size  = 8,
+        drop_last   = False,
+        num_workers = 8,
+        pin_memory  = True,
+        collate_fn  = null_collate
     )
 
     log.write(30 * '-' + '\n' + '*** dataset setting SUMMARY***\n' + 30 * '-' + '\n')

@@ -94,10 +94,15 @@ class CenteredHuDataset(Dataset):
 
         image = cv2.imread(self.data_dir + '%s.png' % id, cv2.IMREAD_COLOR)
         mask  = cv2.imread(self.data_dir + '%s.mask.png' % id, cv2.IMREAD_GRAYSCALE)
-        #print(data_dir + '/tile/%s/%s.png'%(self.image_dir,id))
+        # print(self.data_dir + '%s.png' % id)
 
-        image = image.astype(np.float32) / 255
-        mask  = mask.astype(np.float32) / 255
+        try:
+            image = image.astype(np.float32) / 255
+            mask  = mask.astype(np.float32) / 255
+        except:
+            print(f"image not found: {self.data_dir + '%s.png' % id}")
+            sys.exit()
+
         r = {
             'image_size': self.image_size,
             'index' : index,
@@ -282,6 +287,80 @@ def train_albu_augment(record):
 
     return record
 
+
+def val_albu_augment(record):
+    """
+    """
+    verbose = record.get('verbose', False)
+    image = record['image']
+    mask = record['mask']
+
+    if verbose:
+        pipeline = albu.ReplayCompose
+    else:
+        pipeline = albu.Compose
+
+    aug = pipeline([
+        albu.OneOf([
+            albu.RandomBrightnessContrast(brightness_limit = 0.2,
+                                          contrast_limit = 0.2,
+                                          brightness_by_max = True,
+                                          always_apply = False,
+                                          p = 1),
+            albu.RandomBrightnessContrast(brightness_limit=(-0.2, 0.6),
+                                          contrast_limit=.2,
+                                          brightness_by_max=True,
+                                          always_apply=False,
+                                          p= 1),
+            albu.augmentations.transforms.ColorJitter(brightness=0.2,
+                                                      contrast=0.2,
+                                                      saturation=0.1,
+                                                      hue=0.1,
+                                                      always_apply=False,
+                                                      p=1),
+            albu.RandomGamma(p=1)
+        ], p=1),
+        albu.OneOf([
+            albu.GaussNoise(0.02, p=.5),
+            albu.IAAAffine(p=.5),
+        ], p=.25),
+        albu.OneOf([
+            albu.augmentations.transforms.Blur(blur_limit=15, always_apply=False, p=0.25),
+            albu.augmentations.transforms.Blur(blur_limit=3, always_apply=False, p=0.5)
+        ], p=0.5),
+    ])
+    data = aug(image=image, mask=mask)
+    record['image'] = data['image']
+    record['mask'] = data['mask']
+
+    if verbose:
+        for transformation in data['replay']['transforms']:
+            if not isinstance(transformation, dict):
+                print('not a dict')
+                pass
+            elif transformation.get('applied', False):
+                print(30*'-')
+                if 'OneOf' in transformation['__class_fullname__']:
+                    print(30 * '=')
+                    for _trans in transformation['transforms']:
+                        if not _trans.get('applied', False): continue
+                        _name = _trans['__class_fullname__']
+                        if 'Flip' in _name: continue
+
+                        print(_trans['__class_fullname__'])
+                        for k, v in _trans.items():
+                            if k in ['__class_fullname__', 'applied', 'always_apply']: continue
+                            print(f"{k}: {v}")
+
+                else:
+                    _name = transformation['__class_fullname__']
+                    if 'Flip' in _name: continue
+                    print(_name)
+                    for k, v in transformation.items():
+                        if k in ['__class_fullname__', 'applied', 'always_apply']: continue
+                        print(f"{k}: {v}")
+
+    return record
 
 def crop(record):
     image_size = record['image_size']
