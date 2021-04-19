@@ -223,14 +223,14 @@ def train_albu_augment(record):
 
     aug = pipeline([
         albu.Sequential([
-            albu.GaussNoise(0.1, p=1),
+            albu.GaussNoise(0.05, p=1),
             albu.augmentations.transforms.Blur(blur_limit=7, always_apply=False, p=1),
         ], p=0.1),
         albu.OneOf([
             albu.ElasticTransform(p=0.5),
             albu.IAAPiecewiseAffine(p=0.5),
             albu.OpticalDistortion(p=1)
-        ], p=0.1),
+        ], p=0.01),
         albu.OneOf([
             albu.RandomBrightnessContrast(brightness_limit = 0.2,
                                           contrast_limit = 0.2,
@@ -249,7 +249,7 @@ def train_albu_augment(record):
                                                       always_apply=False,
                                                       p=1),
             albu.RandomGamma(p=1)
-        ], p=1),
+        ], p=0.5),
         albu.OneOf([
             albu.GaussNoise(0.02, p=.5),
             albu.IAAAffine(p=.5),
@@ -257,7 +257,7 @@ def train_albu_augment(record):
         albu.OneOf([
             albu.augmentations.transforms.Blur(blur_limit=15, always_apply=False, p=0.25),
             albu.augmentations.transforms.Blur(blur_limit=3, always_apply=False, p=0.5)
-        ], p=0.25),
+        ], p=0.5),
         albu.RandomRotate90(p=.5),
         albu.HorizontalFlip(p=.5),
         albu.VerticalFlip(p=.5),
