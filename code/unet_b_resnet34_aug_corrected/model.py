@@ -180,22 +180,23 @@ class ResDecode(nn.Module):
 
 
 class Net(nn.Module):
-    def __init__(self):
+    def __init__(self, backbone):
         super(Net, self).__init__()
 
-        # self.cnn_model = Unet(
-        #     encoder_name="resnet34",     # choose encoder, e.g. mobilenet_v2 or efficientnet-b7
-        #     encoder_weights="imagenet",  # use `imagenet` pre-trained weights for encoder initialization
-        #     in_channels=3,               # model input channels (1 for gray-scale images, 3 for RGB, etc.)
-        #     classes=1,                   # model output channels (number of classes in your dataset)
-        # )
-
-        self.cnn_model = Unet(
-            encoder_name="efficientnet-b0",  # choose encoder, e.g. mobilenet_v2 or efficientnet-b7
-            encoder_weights="imagenet",  # use `imagenet` pre-trained weights for encoder initialization
-            in_channels=3,  # model input channels (1 for gray-scale images, 3 for RGB, etc.)
-            classes=1,  # model output channels (number of classes in your dataset)
-        )
+        if backbone == 'resnet34':
+            self.cnn_model = Unet(
+                encoder_name    = "resnet34",  # choose encoder, e.g. mobilenet_v2 or efficientnet-b7
+                encoder_weights = "imagenet",  # use `imagenet` pre-trained weights for encoder initialization
+                in_channels     = 3,           # model input channels (1 for gray-scale images, 3 for RGB, etc.)
+                classes         = 1,           # model output channels (number of classes in your dataset)
+            )
+        elif backbone == 'efficientnet-b0':
+            self.cnn_model = Unet(
+                encoder_name    = "efficientnet-b0",
+                encoder_weights = "imagenet",
+                in_channels     = 3,
+                classes         = 1,
+            )
 
     def forward(self, imgs):
         img_segs = self.cnn_model(imgs)

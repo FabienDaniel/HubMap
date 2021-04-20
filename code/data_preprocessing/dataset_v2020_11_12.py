@@ -232,28 +232,28 @@ def train_albu_augment(record):
             albu.OpticalDistortion(p=1)
         ], p=0.001),
         albu.OneOf([
-            albu.RandomBrightnessContrast(brightness_limit = 0.2,
-                                          contrast_limit = 0.2,
+            albu.RandomBrightnessContrast(brightness_limit = 0.1,
+                                          contrast_limit = 0.1,
                                           brightness_by_max = True,
                                           always_apply = False,
                                           p = 1),
-            albu.RandomBrightnessContrast(brightness_limit=(-0.2, 0.6),
+            albu.RandomBrightnessContrast(brightness_limit=(-0.1, 0.4),
                                           contrast_limit=.2,
                                           brightness_by_max=True,
                                           always_apply=False,
                                           p= 1),
-            albu.augmentations.transforms.ColorJitter(brightness=0.2,
-                                                      contrast=0.2,
+            albu.augmentations.transforms.ColorJitter(brightness=0.1,
+                                                      contrast=0.1,
                                                       saturation=0.1,
                                                       hue=0.1,
                                                       always_apply=False,
                                                       p=1),
-            albu.RandomGamma(p=0.5)
+            albu.RandomGamma(p=1)
         ], p=0.5),
-        albu.OneOf([
-            albu.GaussNoise(0.02, p=.5),
-            albu.IAAAffine(p=.5),
-        ], p=.25),
+        # albu.OneOf([
+        #     albu.GaussNoise(0.02, p=.5),
+        #     albu.IAAAffine(p=.5),
+        # ], p=.25),
         albu.OneOf([
             albu.augmentations.transforms.Blur(blur_limit=15, always_apply=False, p=0.25),
             albu.augmentations.transforms.Blur(blur_limit=3, always_apply=False, p=0.5)

@@ -203,6 +203,7 @@ def run_train(show_valid_images=False,
               tile_size=320,       # overall size of the input images
               image_size=320,      # overall size of the input images
               tile_scale=1,
+              backbone='resnet34',
               *args,
               **kwargs
               ):
@@ -323,7 +324,7 @@ def run_train(show_valid_images=False,
         scaler = amp.GradScaler()
         net = AmpNet().cuda()
     else:
-        net = Net().cuda()
+        net = Net(backbone).cuda()
 
     if initial_checkpoint is not None:
         f = torch.load(initial_checkpoint, map_location=lambda storage, loc: storage)
@@ -598,6 +599,7 @@ if __name__ == '__main__':
             loss_type         = "weighted_bce",
             tile_scale        = 0.5,
             tile_size         = 700,
-            image_size        = 512
+            image_size        = 512,
+            backbone          = 'efficientnet-b0',
         )
 

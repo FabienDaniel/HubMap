@@ -337,7 +337,7 @@ def result_bookeeping(id, tile_probability, overall_probabilities,
     return f'y{y0}_x{x0}.png', x0, y0, dice
 
 
-def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, layer1):
+def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, layer1, backbone):
 
     project_repo, raw_data_dir, data_dir = get_data_path(SERVER_RUN)
 
@@ -481,7 +481,7 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
             #######################################
             overall_probabilities = []
             for _num, _checkpoint in enumerate(initial_checkpoint):
-                net = Net().cuda()
+                net = Net(backbone).cuda()
                 state_dict = torch.load(_checkpoint, map_location=lambda storage, loc: storage)['state_dict']
                 net.load_state_dict(state_dict, strict=True)
                 net = net.eval()
@@ -642,7 +642,8 @@ if __name__ == '__main__':
                    scale=0.5,
                    flip_predict=args.flip,
                    checkpoint_sha=args.CheckpointSha,
-                   layer1 = args.layer1
+                   layer1 = args.layer1,
+                   backbone='resnet34',
                    )
 
     elif SERVER_RUN == 'kaggle':
@@ -653,6 +654,7 @@ if __name__ == '__main__':
                scale=0.5,
                flip_predict=True,
                checkpoint_sha='ae731b8de',
-               layer1='result/Baseline/fold6_9_10/predictions_e9b0864a1/kaggle-all-mean'
+               layer1='result/Baseline/fold6_9_10/predictions_e9b0864a1/kaggle-all-mean',
+               backbone='resnet34',
                )
 
