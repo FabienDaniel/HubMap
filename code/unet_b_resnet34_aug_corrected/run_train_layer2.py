@@ -323,7 +323,7 @@ def run_train(show_valid_images=False,
         scaler = amp.GradScaler()
         net = AmpNet().cuda()
     else:
-        net = Net(image_size).cuda()
+        net = Net().cuda()
 
     if initial_checkpoint is not None:
         f = torch.load(initial_checkpoint, map_location=lambda storage, loc: storage)
@@ -589,7 +589,7 @@ if __name__ == '__main__':
             show_valid_images = False,
             sha               = model_sha,
             fold              = fold,
-            start_lr          = 0.0005,
+            start_lr          = 0.0001,
             batch_size        = 8,
             num_iteration     = int(args.iterations),
             iter_log          = 250,

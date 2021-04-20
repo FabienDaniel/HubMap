@@ -225,12 +225,12 @@ def train_albu_augment(record):
         albu.Sequential([
             albu.GaussNoise(0.05, p=1),
             albu.augmentations.transforms.Blur(blur_limit=7, always_apply=False, p=1),
-        ], p=0.1),
+        ], p=0.001),
         albu.OneOf([
             albu.ElasticTransform(p=0.5),
             albu.IAAPiecewiseAffine(p=0.5),
             albu.OpticalDistortion(p=1)
-        ], p=0.01),
+        ], p=0.001),
         albu.OneOf([
             albu.RandomBrightnessContrast(brightness_limit = 0.2,
                                           contrast_limit = 0.2,
@@ -248,7 +248,7 @@ def train_albu_augment(record):
                                                       hue=0.1,
                                                       always_apply=False,
                                                       p=1),
-            albu.RandomGamma(p=1)
+            albu.RandomGamma(p=0.5)
         ], p=0.5),
         albu.OneOf([
             albu.GaussNoise(0.02, p=.5),

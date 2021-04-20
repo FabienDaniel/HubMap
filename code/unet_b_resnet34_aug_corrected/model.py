@@ -180,7 +180,7 @@ class ResDecode(nn.Module):
 
 
 class Net(nn.Module):
-    def __init__(self, image_size):
+    def __init__(self):
         super(Net, self).__init__()
 
         # self.cnn_model = Unet('efficientnet-b0',
