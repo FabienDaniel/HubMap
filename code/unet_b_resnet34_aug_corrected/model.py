@@ -1,4 +1,5 @@
 import numpy as np
+from segmentation_models_pytorch import Unet
 
 from code.unet_b_resnet34_aug_corrected.b_resnet34 import *
 
@@ -178,78 +179,104 @@ class ResDecode(nn.Module):
         return x
 
 
-
-
 class Net(nn.Module):
-    def load_pretrain(self, skip=['logit.',], is_print=True):
-        load_pretrain(self, skip, pretrain_file=PRETRAIN_FILE, conversion=CONVERSION, is_print=is_print)
-
-    def __init__( self, ):
+    def __init__(self, image_size):
         super(Net, self).__init__()
-        e = EnResNet34()
-        self.rgb = RGB()
 
-        self.block0 = e.block0
-        self.block1 = e.block1
-        self.block2 = e.block2
-        self.block3 = e.block3
-        self.block4 = e.block4
-        e = None  #dropped
+        # self.cnn_model = Unet('efficientnet-b0',
+        #                       encoder_weights="imagenet",
+        #                       classes=1,
+        #                       activation=None)
 
-        #---
-        # self.center = nn.Sequential(
-        #     nn.Conv2d(256, 256, kernel_size=3, padding=1, bias=False),
-        #     nn.BatchNorm2d(64),
-        #     nn.ReLU(inplace=True),
-        #
-        #     nn.Conv2d(256, 256, kernel_size=3, padding=2, dilation=2, bias=False),
-        #     nn.BatchNorm2d(64),
-        #     nn.ReLU(inplace=True),
-        #
-        #     nn.Conv2d(256, 256, kernel_size=3, padding=4, dilation=4, bias=False),
-        #     nn.BatchNorm2d(64),
-        #     nn.ReLU(inplace=True),
-        # )
+        # decoder_channels = [int(image_size / 2**n) for n in range(5)]
+        # print(decoder_channels)
 
-        self.center = nn.Sequential(
-            nn.Conv2d(512, 512, kernel_size=11, padding=5, bias=False),
-            nn.BatchNorm2d(512),
-            nn.ReLU(inplace=True),
+        self.cnn_model = Unet(
+            encoder_name="resnet34",     # choose encoder, e.g. mobilenet_v2 or efficientnet-b7
+            encoder_weights="imagenet",  # use `imagenet` pre-trained weights for encoder initialization
+            in_channels=3,               # model input channels (1 for gray-scale images, 3 for RGB, etc.)
+            # decoder_channels = decoder_channels,
+            classes=1,                   # model output channels (number of classes in your dataset)
         )
-        self.decode1 = ResDecode(256+512, 256)
-        self.decode2 = ResDecode(128+256, 128)
-        self.decode3 = ResDecode( 64+128,  64)
-        self.decode4 = ResDecode( 64+ 64,  32)
-        self.decode5 = ResDecode(     32,  16)
-        #---
 
-        self.logit = nn.Conv2d(16, 1, kernel_size=3, padding=1)
+    def forward(self, imgs):
 
-    def forward(self, image):
-        batch_size,C,H,W = image.shape
-        # print(batch_size, C, H, W)
+        # print(imgs.shape)
 
-        #x = self.rgb(image)
-        x = image
+        img_segs = self.cnn_model(imgs)
+        return img_segs
 
-        x0 = self.block0(x)         #;print('block0',x0.shape)
-        x1 = self.block1(x0)        #;print('block1',x1.shape)
-        x2 = self.block2(x1)        #;print('block2',x2.shape)
-        x3 = self.block3(x2)        #;print('block3',x3.shape)
-        x4 = self.block4(x3)        #;print('block4',x4.shape)
 
-        skip = [x0,x1,x2,x3]
-
-        #----
-        z = self.center(x4)
-        z = self.decode1([skip[-1], resize_like(z, skip[-1])])  #; print('d1',x.size())
-        z = self.decode2([skip[-2], resize_like(z, skip[-2])])  #; print('d2',x.size())
-        z = self.decode3([skip[-3], resize_like(z, skip[-3])])  #; print('d3',x.size())
-        z = self.decode4([skip[-4], resize_like(z, skip[-4])])  #; print('d4',x.size())
-        z = self.decode5([resize_like(z, x)])
-
-        logit = self.logit(z)
-        return logit
+# class Net(nn.Module):
+#     def load_pretrain(self, skip=['logit.',], is_print=True):
+#         load_pretrain(self, skip, pretrain_file=PRETRAIN_FILE, conversion=CONVERSION, is_print=is_print)
+#
+#     def __init__( self, ):
+#         super(Net, self).__init__()
+#         e = EnResNet34()
+#         self.rgb = RGB()
+#
+#         self.block0 = e.block0
+#         self.block1 = e.block1
+#         self.block2 = e.block2
+#         self.block3 = e.block3
+#         self.block4 = e.block4
+#         e = None  #dropped
+#
+#         #---
+#         # self.center = nn.Sequential(
+#         #     nn.Conv2d(256, 256, kernel_size=3, padding=1, bias=False),
+#         #     nn.BatchNorm2d(64),
+#         #     nn.ReLU(inplace=True),
+#         #
+#         #     nn.Conv2d(256, 256, kernel_size=3, padding=2, dilation=2, bias=False),
+#         #     nn.BatchNorm2d(64),
+#         #     nn.ReLU(inplace=True),
+#         #
+#         #     nn.Conv2d(256, 256, kernel_size=3, padding=4, dilation=4, bias=False),
+#         #     nn.BatchNorm2d(64),
+#         #     nn.ReLU(inplace=True),
+#         # )
+#
+#         self.center = nn.Sequential(
+#             nn.Conv2d(512, 512, kernel_size=11, padding=5, bias=False),
+#             nn.BatchNorm2d(512),
+#             nn.ReLU(inplace=True),
+#         )
+#         self.decode1 = ResDecode(256+512, 256)
+#         self.decode2 = ResDecode(128+256, 128)
+#         self.decode3 = ResDecode( 64+128,  64)
+#         self.decode4 = ResDecode( 64+ 64,  32)
+#         self.decode5 = ResDecode(     32,  16)
+#         #---
+#
+#         self.logit = nn.Conv2d(16, 1, kernel_size=3, padding=1)
+#
+#     def forward(self, image):
+#         batch_size,C,H,W = image.shape
+#         # print(batch_size, C, H, W)
+#
+#         #x = self.rgb(image)
+#         x = image
+#
+#         x0 = self.block0(x)         #;print('block0',x0.shape)
+#         x1 = self.block1(x0)        #;print('block1',x1.shape)
+#         x2 = self.block2(x1)        #;print('block2',x2.shape)
+#         x3 = self.block3(x2)        #;print('block3',x3.shape)
+#         x4 = self.block4(x3)        #;print('block4',x4.shape)
+#
+#         skip = [x0,x1,x2,x3]
+#
+#         #----
+#         z = self.center(x4)
+#         z = self.decode1([skip[-1], resize_like(z, skip[-1])])  #; print('d1',x.size())
+#         z = self.decode2([skip[-2], resize_like(z, skip[-2])])  #; print('d2',x.size())
+#         z = self.decode3([skip[-3], resize_like(z, skip[-3])])  #; print('d3',x.size())
+#         z = self.decode4([skip[-4], resize_like(z, skip[-4])])  #; print('d4',x.size())
+#         z = self.decode5([resize_like(z, x)])
+#
+#         logit = self.logit(z)
+#         return logit
 
 #--------------------------------------------------------------------
 

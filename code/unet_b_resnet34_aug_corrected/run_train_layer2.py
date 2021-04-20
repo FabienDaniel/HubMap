@@ -323,7 +323,7 @@ def run_train(show_valid_images=False,
         scaler = amp.GradScaler()
         net = AmpNet().cuda()
     else:
-        net = Net().cuda()
+        net = Net(image_size).cuda()
 
     if initial_checkpoint is not None:
         f = torch.load(initial_checkpoint, map_location=lambda storage, loc: storage)
@@ -477,6 +477,7 @@ def run_train(show_valid_images=False,
                 scaler.update()
             else:
                 # logit = data_parallel(net, image)
+
                 logit = net(image)
                 loss = get_loss(loss_type, logit, mask)
                 loss.backward()
@@ -589,7 +590,7 @@ if __name__ == '__main__':
             sha               = model_sha,
             fold              = fold,
             start_lr          = 0.0005,
-            batch_size        = 16,
+            batch_size        = 8,
             num_iteration     = int(args.iterations),
             iter_log          = 250,
             iter_save         = 250,
@@ -597,6 +598,6 @@ if __name__ == '__main__':
             loss_type         = "weighted_bce",
             tile_scale        = 0.5,
             tile_size         = 700,
-            image_size        = 380
+            image_size        = 512
         )
 
