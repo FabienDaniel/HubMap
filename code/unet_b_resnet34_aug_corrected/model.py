@@ -183,26 +183,21 @@ class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
 
-        # self.cnn_model = Unet('efficientnet-b0',
-        #                       encoder_weights="imagenet",
-        #                       classes=1,
-        #                       activation=None)
-
-        # decoder_channels = [int(image_size / 2**n) for n in range(5)]
-        # print(decoder_channels)
+        # self.cnn_model = Unet(
+        #     encoder_name="resnet34",     # choose encoder, e.g. mobilenet_v2 or efficientnet-b7
+        #     encoder_weights="imagenet",  # use `imagenet` pre-trained weights for encoder initialization
+        #     in_channels=3,               # model input channels (1 for gray-scale images, 3 for RGB, etc.)
+        #     classes=1,                   # model output channels (number of classes in your dataset)
+        # )
 
         self.cnn_model = Unet(
-            encoder_name="resnet34",     # choose encoder, e.g. mobilenet_v2 or efficientnet-b7
+            encoder_name="efficientnet-b0",  # choose encoder, e.g. mobilenet_v2 or efficientnet-b7
             encoder_weights="imagenet",  # use `imagenet` pre-trained weights for encoder initialization
-            in_channels=3,               # model input channels (1 for gray-scale images, 3 for RGB, etc.)
-            # decoder_channels = decoder_channels,
-            classes=1,                   # model output channels (number of classes in your dataset)
+            in_channels=3,  # model input channels (1 for gray-scale images, 3 for RGB, etc.)
+            classes=1,  # model output channels (number of classes in your dataset)
         )
 
     def forward(self, imgs):
-
-        # print(imgs.shape)
-
         img_segs = self.cnn_model(imgs)
         return img_segs
 

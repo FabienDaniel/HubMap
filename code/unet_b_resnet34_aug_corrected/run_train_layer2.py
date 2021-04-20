@@ -590,7 +590,7 @@ if __name__ == '__main__':
             sha               = model_sha,
             fold              = fold,
             start_lr          = 0.0001,
-            batch_size        = 8,
+            batch_size        = 6,
             num_iteration     = int(args.iterations),
             iter_log          = 250,
             iter_save         = 250,
