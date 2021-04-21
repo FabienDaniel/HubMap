@@ -222,10 +222,10 @@ def train_albu_augment(record):
 
 
     aug = pipeline([
-        # albu.Sequential([
-        #     albu.GaussNoise(0.05, p=1),
-        #     albu.augmentations.transforms.Blur(blur_limit=5, always_apply=False, p=1),
-        # ], p=0.05),
+        albu.Sequential([
+            albu.GaussNoise(0.05, p=1),
+            albu.augmentations.transforms.Blur(blur_limit=5, always_apply=False, p=1),
+        ], p=0.1),
         albu.OneOf([
             albu.ElasticTransform(p=0.5),
             albu.IAAPiecewiseAffine(p=0.5),
