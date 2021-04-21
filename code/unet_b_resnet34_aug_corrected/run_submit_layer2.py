@@ -643,7 +643,7 @@ if __name__ == '__main__':
                    flip_predict=args.flip,
                    checkpoint_sha=args.CheckpointSha,
                    layer1 = args.layer1,
-                   backbone='resnet34',
+                   backbone='efficientnet-b0',
                    )
 
     elif SERVER_RUN == 'kaggle':
@@ -655,6 +655,6 @@ if __name__ == '__main__':
                flip_predict=True,
                checkpoint_sha='ae731b8de',
                layer1='result/Baseline/fold6_9_10/predictions_e9b0864a1/kaggle-all-mean',
-               backbone='resnet34',
+               backbone='efficientnet-b0',
                )
 
