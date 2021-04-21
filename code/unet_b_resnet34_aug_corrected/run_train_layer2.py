@@ -596,7 +596,7 @@ if __name__ == '__main__':
             iter_log          = 250,
             iter_save         = 250,
             first_iter_save   = 0,
-            loss_type         = "weighted_bce",
+            loss_type         = "bce",
             tile_scale        = 0.5,
             tile_size         = 700,
             image_size        = 512,
