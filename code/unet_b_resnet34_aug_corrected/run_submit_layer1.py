@@ -341,7 +341,8 @@ def result_bookeeping(id, tile_probability, overall_probabilities,
     return f'y{y0}_x{x0}.png', x0, y0, dice
 
 
-def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, layer1, backbone):
+def submit(sha, server, iterations, fold, scale,
+           flip_predict, checkpoint_sha, layer1, backbone, proba_threshold):
     project_repo, raw_data_dir, data_dir = get_data_path(SERVER_RUN)
 
     if SERVER_RUN == 'kaggle':
@@ -644,25 +645,27 @@ if __name__ == '__main__':
         #
         # else:
         submit(model_sha,
-               server=args.Server,
-               iterations=args.Iterations,
-               fold=fold,
-               scale=0.5,
-               flip_predict=args.flip,
-               checkpoint_sha=args.CheckpointSha,
-               layer1=args.layer1,
-               backbone='efficientnet-b0',
+               server          = args.Server,
+               iterations      = args.Iterations,
+               fold            = fold,
+               scale           = 0.5,
+               flip_predict    = args.flip,
+               checkpoint_sha  = args.CheckpointSha,
+               layer1          = args.layer1,
+               backbone        = 'efficientnet-b0',
+               proba_threshold = 0.2,
                )
 
     elif SERVER_RUN == 'kaggle':
         submit('ae731b8de',
-               server='kaggle',
-               iterations='top3',
-               fold=[''],
-               scale=0.5,
-               flip_predict=True,
-               checkpoint_sha='ae731b8de',
-               layer1='../input/hubmap-layer1/',
-               backbone='efficientnet-b0',
+               server          = 'kaggle',
+               iterations      = 'top3',
+               fold            = [''],
+               scale           = 0.5,
+               flip_predict    = True,
+               checkpoint_sha  = 'ae731b8de',
+               layer1          = '../input/hubmap-layer1/',
+               backbone        = 'efficientnet-b0',
+               proba_threshold = 0.2,
                )
 

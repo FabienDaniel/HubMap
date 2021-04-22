@@ -201,7 +201,6 @@ def submit(sha, server, iterations, fold, flip_predict, checkpoint_sha, proba_th
         print(30 * '-')
         print("tile matrix shape:", tile_image.shape)
 
-
         height, width = tile['image_small'].shape[:2]
 
         individual_probabilities = []
