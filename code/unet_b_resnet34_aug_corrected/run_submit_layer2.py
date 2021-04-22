@@ -9,13 +9,14 @@ import PIL
 import numpy as np
 import cv2
 import pandas as pd
-import imutils
 import rasterio
 import torch
 from rasterio.windows import Window
 from torch.nn.parallel.data_parallel import data_parallel
+from datetime import datetime
 
 SERVER_RUN = 'local'
+DEBUG = True
 
 
 if SERVER_RUN == 'local':
@@ -28,14 +29,19 @@ if SERVER_RUN == 'local':
         np_binary_cross_entropy_loss_optimized, np_dice_score_optimized, np_accuracy_optimized
 
 elif SERVER_RUN == 'kaggle':
-    from code.data_preprocessing.dataset_v2020_11_12 import make_image_id
-    from code.hubmap_v2 import rle_encode, get_data_path, read_mask, to_mask
-    from code.lib.include import IDENTIFIER
-    from code.lib.utility.file import Logger, time_to_str
-    from code.unet_b_resnet34_aug_corrected.model import Net, \
-        np_binary_cross_entropy_loss_optimized, np_dice_score_optimized, np_accuracy_optimized
+    IDENTIFIER = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
 
+    # Let's see what we have in our imported directory
+    # ! ls.. / input / offline - packages - hubmap
+    # ! pip
+    # install.. / input / offline - packages - hubmap / imutils - 0.5
+    # .4
 
+    from hubmap_v2 import rle_encode, get_data_path, read_mask, to_mask, make_image_id
+    from utility_hubmap import Logger, time_to_str
+    from hubmap_model import Net, np_binary_cross_entropy_loss_optimized, np_dice_score_optimized, np_accuracy_optimized
+
+import imutils
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 Image.MAX_IMAGE_PIXELS = None
@@ -65,6 +71,7 @@ def get_probas(net, tile_image, flip_predict):
 class TileGenerator:
     """ Reads an image and creates a generator to load sub-images
     """
+
     def __init__(self, image_id, raw_data_dir, size=320, scale=1, layer1_path=None, server=None):
         self.size = int(size / scale)
         self.server = server
@@ -120,7 +127,7 @@ class TileGenerator:
             # print(tile_mask.shape)
 
             tile_image = np.ascontiguousarray(tile_image.transpose(2, 0, 1))
-            tile_image = tile_image.astype(np.float32) / 255   # Colors x tile_x x tile_y
+            tile_image = tile_image.astype(np.float32) / 255  # Colors x tile_x x tile_y
 
             if self.server == 'local':
                 tile_mask = np.ascontiguousarray(tile_mask)
@@ -137,7 +144,7 @@ class HuBMAPDataset:
     def __init__(self, image_path, sz=256, scale=1, saturation_threshold=40):
 
         self.scale = scale
-        self.s_th = saturation_threshold     # saturation blancking threshold
+        self.s_th = saturation_threshold  # saturation blancking threshold
         self.p_th = 1000 * (sz // 256) ** 2  # threshold for the minimum number of pixels
         scale_transform = rasterio.Affine(1, 0, 0, 0, 1, 0)
 
@@ -156,7 +163,7 @@ class HuBMAPDataset:
                     self.layers.append(rasterio.open(subdataset))
         self.shape = self.data.shape
 
-        self.width  = self.shape[1]
+        self.width = self.shape[1]
         self.height = self.shape[0]
         self.sz = sz
 
@@ -179,7 +186,7 @@ class HuBMAPDataset:
         # mapping the load region to the tile
         if self.data.count == 3:
             img[(p00 - y0):(p01 - y0), (p10 - x0):(p11 - x0)] = np.moveaxis(
-                self.data.read([1, 2, 3], window = Window.from_slices((p00, p01), (p10, p11))), 0, -1)
+                self.data.read([1, 2, 3], window=Window.from_slices((p00, p01), (p10, p11))), 0, -1)
         else:
             for i, layer in enumerate(self.layers):
                 img[(p00 - y0):(p01 - y0), (p10 - x0):(p11 - x0), i] = \
@@ -265,7 +272,6 @@ def _get_centroids(layer1_path, image_id, width, height, image_size):
 
 def result_bookeeping(id, tile_probability, overall_probabilities,
                       tile_mask, image, tile_centroids, server, submit_dir, save_to_disk):
-
     probas = np.mean(overall_probabilities, axis=0)
 
     Path(submit_dir + f'/{id}').mkdir(parents=True, exist_ok=True)
@@ -302,7 +308,6 @@ def result_bookeeping(id, tile_probability, overall_probabilities,
 
         proba = probas[:, :]
 
-
         overlay2 = draw_contour_overlay(
             overlay,
             probas[:, :].astype(np.float32),
@@ -324,8 +329,6 @@ def result_bookeeping(id, tile_probability, overall_probabilities,
     else:
         dice = None
 
-
-
     image_show_norm('overlay2',
                     overlay2,
                     min=0, max=1, resize=1)
@@ -338,25 +341,26 @@ def result_bookeeping(id, tile_probability, overall_probabilities,
 
 
 def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, layer1, backbone):
-
     project_repo, raw_data_dir, data_dir = get_data_path(SERVER_RUN)
 
     if SERVER_RUN == 'kaggle':
-        out_dir = project_repo + f"/result/Layer_2/fold{'_'.join(map(str, fold))}"
+        out_dir = '../input/hubmap-checkpoints/'
+        result_dir = '/kaggle/working/'
     else:
         out_dir = project_repo + f"/result/Layer_2/fold{'_'.join(map(str, fold))}"
+        result_dir = out_dir
 
     # --------------------------------------------------------------
     # Verifie le sha1 du modèle à utiliser pour faire l'inférence
     # Le commit courant est utilisé si non spécifié
     # --------------------------------------------------------------
     if checkpoint_sha is not None or SERVER_RUN == 'kaggle':
-        print("Checkpoint for current inference:", checkpoint_sha)
         _sha = checkpoint_sha
-        _checkpoint_dir = out_dir + f"/checkpoint_{checkpoint_sha}/"
     else:
         _sha = sha
-        _checkpoint_dir = out_dir + f"/checkpoint_{sha}/"
+    _checkpoint_dir = out_dir + f"/checkpoint_{_sha}/"
+    print("Checkpoint for current inference:", _sha)
+    print(os.listdir(_checkpoint_dir))
 
     # --------------------------------------------------------------
     # Verifie les checkpoints à utiliser pour l'inférence:
@@ -378,7 +382,7 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
         scores = [float(_file.split('_')[1]) for _file in os.listdir(_checkpoint_dir)]
 
         ordered_models = list(zip(model_checkpoints, scores))
-        ordered_models.sort(key = lambda x: x[1], reverse=True)
+        ordered_models.sort(key=lambda x: x[1], reverse=True)
         model_checkpoints = np.array(ordered_models[:nbest])[:, 0]
         model_checkpoints = model_checkpoints.tolist()
 
@@ -403,16 +407,16 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
         tag = checkpoint_sha + '-'
 
     if iterations == 'all':
-        submit_dir = out_dir + f'/predictions_{sha}/%s-%s-%smean' % (server, 'all', tag)
+        submit_dir = result_dir + f'/predictions_{sha}/%s-%s-%smean' % (server, 'all', tag)
     elif flip_predict:
-        submit_dir = out_dir + f'/predictions_{sha}/%s-%s-%smean' % (server, iter_tag, tag)
+        submit_dir = result_dir + f'/predictions_{sha}/%s-%s-%smean' % (server, iter_tag, tag)
     else:
-        submit_dir = out_dir + f'/predictions_{sha}/%s-%s-%snoflip' % (server, iter_tag, tag)
+        submit_dir = result_dir + f'/predictions_{sha}/%s-%s-%snoflip' % (server, iter_tag, tag)
 
     os.makedirs(submit_dir, exist_ok=True)
 
     log = Logger()
-    log.open(out_dir + f'/log.submit_{sha}.txt', mode='a')
+    log.open(result_dir + f'/log.submit_{sha}.txt', mode='a')
     log.write('\n--- [START %s] %s\n\n' % (IDENTIFIER, '-' * 64))
 
     ##########################################################################################
@@ -452,12 +456,11 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
         log.write(50 * "=" + "\n")
         log.write(f"Inference for image: {id} \n")
 
-
         ###############
         # Define tiles
         ###############
         tiles = TileGenerator(image_id=id, raw_data_dir=raw_data_dir, size=tile_size,
-                               scale=scale, layer1_path=layer1, server=server)
+                              scale=scale, layer1_path=layer1, server=server)
 
         print(30 * '-')
         height = tiles.height
@@ -503,7 +506,7 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
                         tile['centroids'],
                         server,
                         submit_dir,
-                        save_to_disk = last_iter
+                        save_to_disk=last_iter
                     )
                     if last_iter:
                         results.append([id, image_name, x0, y0, dice])
@@ -522,7 +525,7 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
 
         scaled_centroid_list = (np.array(tiles.centroid_list) * scale).astype(np.int).tolist()
 
-        probability = to_mask(tile_probability,           # N * scaled_height x scaled_width
+        probability = to_mask(tile_probability,  # N * scaled_height x scaled_width
                               scaled_centroid_list,
                               int(scale * height),
                               int(scale * width),
@@ -539,7 +542,7 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
         # Saves the numpy array that contains probabilities
         # np.savez_compressed(submit_dir + f'/proba_{id}.npy', probability=probability)
 
-        #--- show results ---
+        # --- show results ---
         if server == 'local':
             truth = tiles.original_mask.astype(np.float32) / 255
             # print("before rescaling", truth.shape)
@@ -571,7 +574,7 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
             p = rle_encode(predict)
             predicted.append(p)
 
-    #-----
+    # -----
     if server == 'kaggle':
         df['id'] = valid_image_id
         df['predicted'] = predicted
@@ -642,7 +645,7 @@ if __name__ == '__main__':
                    scale=0.5,
                    flip_predict=args.flip,
                    checkpoint_sha=args.CheckpointSha,
-                   layer1 = args.layer1,
+                   layer1=args.layer1,
                    backbone='efficientnet-b0',
                    )
 
@@ -654,7 +657,7 @@ if __name__ == '__main__':
                scale=0.5,
                flip_predict=True,
                checkpoint_sha='ae731b8de',
-               layer1='result/Baseline/fold6_9_10/predictions_e9b0864a1/kaggle-all-mean',
+               layer1='../input/hubmap-layer1/',
                backbone='efficientnet-b0',
                )
 
