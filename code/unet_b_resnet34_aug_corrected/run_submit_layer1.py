@@ -70,7 +70,7 @@ class TileGenerator:
     """ Reads an image and creates a generator to load sub-images
     """
 
-    def __init__(self, image_id, raw_data_dir, size=320, scale=1, layer1_path=None, server=None):
+    def __init__(self, image_id, raw_data_dir, size=320, scale=1, server=None):
         self.size = int(size / scale)
         self.server = server
         self.scale = scale
@@ -96,11 +96,16 @@ class TileGenerator:
         # ----------------------------------------------------------------------
         # calcul des centroides des glomeruli / aux prédictions de la layer 1
         # ----------------------------------------------------------------------
-        self.centroid_list = _get_centroids(layer1_path,
-                                            image_id,
-                                            self.width,
-                                            self.height,
-                                            self.size)
+        #####################
+        # make coord
+        #####################
+        half = size // 2
+        step = size // 2
+        xx = np.array_split(np.arange(half, self.width - half), np.floor((self.width - size) / step))
+        yy = np.array_split(np.arange(half, self.height - half), np.floor((self.height - size) / step))
+        xx = [int(x[0]) for x in xx] + [self.width - half]
+        yy = [int(y[0]) for y in yy] + [self.height - half]
+        self.centroid_list = [[cx, cy] for cx in xx for cy in yy]
 
         if DEBUG:
             self.centroid_list = self.centroid_list[:5]
@@ -342,14 +347,14 @@ def result_bookeeping(id, tile_probability, overall_probabilities,
 
 
 def submit(sha, server, iterations, fold, scale,
-           flip_predict, checkpoint_sha, layer1, backbone, proba_threshold):
+           flip_predict, checkpoint_sha, backbone, proba_threshold):
     project_repo, raw_data_dir, data_dir = get_data_path(SERVER_RUN)
 
     if SERVER_RUN == 'kaggle':
         out_dir = '../input/hubmap-checkpoints/'
         result_dir = '/kaggle/working/'
     else:
-        out_dir = project_repo + f"/result/Layer_2/fold{'_'.join(map(str, fold))}"
+        out_dir = project_repo + f"/result/Layer_1/fold{'_'.join(map(str, fold))}"
         result_dir = out_dir
 
     # --------------------------------------------------------------
@@ -462,7 +467,7 @@ def submit(sha, server, iterations, fold, scale,
         # Define tiles
         ###############
         tiles = TileGenerator(image_id=id, raw_data_dir=raw_data_dir, size=tile_size,
-                              scale=scale, layer1_path=layer1, server=server)
+                              scale=scale, server=server)
 
         print(30 * '-')
         height = tiles.height
@@ -604,7 +609,6 @@ if __name__ == '__main__':
         parser.add_argument("-f", "--fold", help="fold")
         parser.add_argument("-r", "--flip", help="flip image and merge", default=True)
         parser.add_argument("-c", "--CheckpointSha", help="checkpoint with weights", default=None)
-        parser.add_argument("-l", "--layer1", help="predictions from first layer", default=None)
 
         args = parser.parse_args()
 
@@ -617,10 +621,6 @@ if __name__ == '__main__':
             fold = [int(c) for c in args.fold.split()]
         else:
             print("unsupported format for fold")
-            sys.exit()
-
-        if not args.layer1:
-            print("first layer predictions missing")
             sys.exit()
 
         if not args.Iterations:
@@ -651,7 +651,6 @@ if __name__ == '__main__':
                scale           = 0.5,
                flip_predict    = args.flip,
                checkpoint_sha  = args.CheckpointSha,
-               layer1          = args.layer1,
                backbone        = 'efficientnet-b0',
                proba_threshold = 0.2,
                )
@@ -664,7 +663,6 @@ if __name__ == '__main__':
                scale           = 0.5,
                flip_predict    = True,
                checkpoint_sha  = 'ae731b8de',
-               layer1          = '../input/hubmap-layer1/',
                backbone        = 'efficientnet-b0',
                proba_threshold = 0.2,
                )

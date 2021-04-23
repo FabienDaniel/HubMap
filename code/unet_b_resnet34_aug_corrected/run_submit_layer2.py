@@ -583,7 +583,10 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
     if server == 'kaggle':
         df['id'] = valid_image_id
         df['predicted'] = predicted
-        csv_file = submit_dir + f'/submission_{sha}-%s-%s%s.csv' % (out_dir.split('/')[-1], tag, iter_tag)
+        if SERVER_RUN == 'kaggle':
+            csv_file = 'submission.csv'
+        else:
+            csv_file = submit_dir + f'/submission_{sha}-%s-%s%s.csv' % (out_dir.split('/')[-1], tag, iter_tag)
         df.to_csv(csv_file, index=False)
         print(df)
 
