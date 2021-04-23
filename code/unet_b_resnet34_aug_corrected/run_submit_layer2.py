@@ -423,9 +423,12 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
     ##########################################################################################
     # Get the IDs of the images --------------------------------------------------------------
     ##########################################################################################
-    if server == 'local':
+    if SERVER_RUN == 'kaggle':
+        df_submit = pd.read_csv('../input/hubmap-kidney-segmentation/sample_submission.csv', index_col='id')
+        valid_image_id = df_submit.index.tolist()
+    elif server == 'local':
         valid_image_id = make_image_id('train-all')
-    if server == 'kaggle':
+    elif server == 'kaggle':
         valid_image_id = make_image_id('test-all')
 
     ##########################################################################################
@@ -575,7 +578,7 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
             predict = (probability > 0.5).astype(np.uint8)
             del probability
             gc.collect()
-            p = rle_encode(predict)
+            p = rle_encode_less_memory(predict)
             predicted.append(p)
             print("encoding created")
 
@@ -584,9 +587,16 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
         df['id'] = valid_image_id
         df['predicted'] = predicted
         if SERVER_RUN == 'kaggle':
-            csv_file = 'submission.csv'
+            df_submit = pd.read_csv('../input/hubmap-kidney-segmentation/sample_submission.csv', index_col='id')
+            df.set_index('id', inplace=True)
+            df_submit.loc[df.index.values] = df.values
+            df_submit.to_csv('submission.csv')
+
         else:
             csv_file = submit_dir + f'/submission_{sha}-%s-%s%s.csv' % (out_dir.split('/')[-1], tag, iter_tag)
+
+
+
         df.to_csv(csv_file, index=False)
         print(df)
 
@@ -639,23 +649,23 @@ if __name__ == '__main__':
         model_sha = repo.head.object.hexsha[:9]
         print(f"current commit: {model_sha}")
 
-        # changedFiles = [item.a_path for item in repo.index.diff(None) if item.a_path.endswith(".py")]
-        # if len(changedFiles) > 0:
-        #     print("ABORT submission -- There are unstaged files:")
-        #     for _file in changedFiles:
-        #         print(f" * {_file}")
-        #
-        # else:
-        submit(model_sha,
-               server=args.Server,
-               iterations=args.Iterations,
-               fold=fold,
-               scale=0.5,
-               flip_predict=args.flip,
-               checkpoint_sha=args.CheckpointSha,
-               layer1=args.layer1,
-               backbone='efficientnet-b0',
-               )
+        changedFiles = [item.a_path for item in repo.index.diff(None) if item.a_path.endswith(".py")]
+        if len(changedFiles) > 0:
+            print("ABORT submission -- There are unstaged files:")
+            for _file in changedFiles:
+                print(f" * {_file}")
+
+        else:
+            submit(model_sha,
+                   server=args.Server,
+                   iterations=args.Iterations,
+                   fold=fold,
+                   scale=0.5,
+                   flip_predict=args.flip,
+                   checkpoint_sha=args.CheckpointSha,
+                   layer1=args.layer1,
+                   backbone='efficientnet-b0',
+                   )
 
     elif SERVER_RUN == 'kaggle':
         submit('ae731b8de',

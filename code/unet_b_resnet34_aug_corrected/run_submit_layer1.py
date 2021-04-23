@@ -99,20 +99,40 @@ class TileGenerator:
         #####################
         # make coord
         #####################
-        half = size // 2
-        step = size // 2
-        xx = np.array_split(np.arange(half, self.width - half), np.floor((self.width - size) / step))
-        yy = np.array_split(np.arange(half, self.height - half), np.floor((self.height - size) / step))
+        half = self.size // 2
+        step = self.size * 0.8
+
+        print(f"nb width step: {np.floor((self.width - self.size) / step)}")
+        print(f"nb height step: {np.floor((self.height - self.size) / step)}")
+
+
+        xx = np.array_split(np.arange(half, self.width - half), np.floor((self.width - self.size) / step))
+        yy = np.array_split(np.arange(half, self.height - half), np.floor((self.height - self.size) / step))
         xx = [int(x[0]) for x in xx] + [self.width - half]
         yy = [int(y[0]) for y in yy] + [self.height - half]
         self.centroid_list = [[cx, cy] for cx in xx for cy in yy]
+
+        print(f'nb of images: {len(self.centroid_list)}')
 
         if DEBUG:
             self.centroid_list = self.centroid_list[:5]
 
     def get_next(self):
         for cX, cY in self.centroid_list:
+
             sub_image, _ = self.image_loader[(cX - self.size // 2, cY - self.size // 2)]
+
+            vv = cv2.cvtColor(sub_image.astype(np.float32), cv2.COLOR_RGB2HSV)
+
+            if vv.mean() < 0.25:
+                print(f"skips coord: ({cX}, {cY}); saturation = {vv.mean()}"+20 * " ", end='\r')
+                yield {
+                    'tile_image': None,
+                    'tile_mask': None,
+                    'centroids': [cX, cY, 1],
+                }
+
+
             if self.server == 'local':
                 sub_mask = self.original_mask[
                            cY - self.size // 2: cY + self.size // 2,
@@ -127,10 +147,6 @@ class TileGenerator:
 
             coord = [cX, cY, 1]
             tile_image = np.copy(sub_image)
-
-            # tile_image = np.stack(tile_image)[..., ::-1]
-            # print(tile_image.shape)
-            # print(tile_mask.shape)
 
             tile_image = np.ascontiguousarray(tile_image.transpose(2, 0, 1))
             tile_image = tile_image.astype(np.float32) / 255  # Colors x tile_x x tile_y
@@ -277,7 +293,7 @@ def _get_centroids(layer1_path, image_id, width, height, image_size):
 
 
 def result_bookeeping(id, tile_probability, overall_probabilities,
-                      tile_mask, image, tile_centroids, server, submit_dir, save_to_disk):
+                      tile_mask, image, tile_centroids, server, submit_dir, save_to_disk, resize_scale):
     probas = np.mean(overall_probabilities, axis=0)
 
     Path(submit_dir + f'/{id}').mkdir(parents=True, exist_ok=True)
@@ -337,7 +353,7 @@ def result_bookeeping(id, tile_probability, overall_probabilities,
 
     image_show_norm('overlay2',
                     overlay2,
-                    min=0, max=1, resize=1)
+                    min=0, max=1, resize=resize_scale)
     cv2.waitKey(1)
 
     # df = pd.DataFrame(tile_scores, columns=['tile', 'image', 'x', 'y', 'dice'])
@@ -429,17 +445,19 @@ def submit(sha, server, iterations, fold, scale,
     ##########################################################################################
     # Get the IDs of the images --------------------------------------------------------------
     ##########################################################################################
-    if server == 'local':
+    if SERVER_RUN == 'kaggle':
+        df_submit = pd.read_csv('../input/hubmap-kidney-segmentation/sample_submission.csv', index_col='id')
+        valid_image_id = df_submit.index.tolist()
+    elif server == 'local':
         valid_image_id = make_image_id('train-all')
-    if server == 'kaggle':
+    elif server == 'kaggle':
         valid_image_id = make_image_id('test-all')
 
     ##########################################################################################
     # Define prediction parameters -----------------------------------------------------------
     ##########################################################################################
-    tile_size = 800
+    tile_size = 256 * 6
     tile_average_step = 320
-    # tile_scale = 0.25
     tile_min_score = 0.25
 
     log.write('tile_size = %d \n' % tile_size)
@@ -457,9 +475,6 @@ def submit(sha, server, iterations, fold, scale,
 
     for ind, id in enumerate(valid_image_id):
 
-        # if ind != 5: continue   # test d'usage de RAM
-        # if ind != 0: continue
-
         log.write(50 * "=" + "\n")
         log.write(f"Inference for image: {id} \n")
 
@@ -468,7 +483,6 @@ def submit(sha, server, iterations, fold, scale,
         ###############
         tiles = TileGenerator(image_id=id, raw_data_dir=raw_data_dir, size=tile_size,
                               scale=scale, server=server)
-
         print(30 * '-')
         height = tiles.height
         width = tiles.width
@@ -484,6 +498,10 @@ def submit(sha, server, iterations, fold, scale,
             print('\r %s: n°%d %s' %
                   (ind, index, time_to_str(timer() - start_timer, 'sec')),
                   end='', flush=True)
+
+            if tile['tile_image'] is None:
+                tile_probability.append(np.zeros((tile_size, tile_size)))
+                continue
 
             #######################################
             # Iterates over models.
@@ -513,7 +531,8 @@ def submit(sha, server, iterations, fold, scale,
                         tile['centroids'],
                         server,
                         submit_dir,
-                        save_to_disk=last_iter
+                        save_to_disk=last_iter,
+                        resize_scale=800/tile_size
                     )
                     if last_iter:
                         results.append([id, image_name, x0, y0, dice])
@@ -549,49 +568,55 @@ def submit(sha, server, iterations, fold, scale,
         # Saves the numpy array that contains probabilities
         # np.savez_compressed(submit_dir + f'/proba_{id}.npy', probability=probability)
 
+
+        predict = (probability > proba_threshold).astype(np.float32)
+        cv2.imwrite(submit_dir + '/%s.probability.png' % id, (probability * 255).astype(np.uint8))
+        cv2.imwrite(submit_dir + '/%s.predict.png' % id, (predict * 255).astype(np.uint8))
+
+
         # --- show results ---
-        if server == 'local':
-            truth = tiles.original_mask.astype(np.float32) / 255
-            # print("before rescaling", truth.shape)
-
-            truth = cv2.resize(truth,
-                               dsize=(int(scale * truth.shape[1]),
-                                      int(scale * truth.shape[0])),
-                               interpolation=cv2.INTER_LINEAR)
-
-            loss = np_binary_cross_entropy_loss_optimized(probability, truth)
-            dice = np_dice_score_optimized(probability, truth)
-            tp, tn = np_accuracy_optimized(probability, truth)
-
-            _tmp = pd.DataFrame(results)
-            _tmp.columns = ['id', 'image_name', 'x', 'y', 'dice']
-            _tmp.to_csv(submit_dir + f'/{id}.csv')
-
-            log.write(30 * "-" + '\n')
-            log.write('submit_dir = %s \n' % submit_dir)
-            log.write('initial_checkpoint = %s \n' % [c.split('2020-12-11')[-1] for c in initial_checkpoint])
-            log.write('loss   = %0.8f \n' % loss)
-            log.write('dice   = %0.8f \n' % dice)
-            log.write('tp, tn = %0.8f, %0.8f \n' % (tp, tn))
-            log.write('\n')
-
-        elif server == 'kaggle':
-            print('starts predict mask creation')
-            probability = cv2.resize(probability, dsize=(width, height), interpolation=cv2.INTER_LINEAR)
-            predict = (probability > 0.5).astype(np.uint8)
-            del probability
-            gc.collect()
-            p = rle_encode(predict)
-            predicted.append(p)
-            print("encoding created")
+        # if server == 'local':
+        #     truth = tiles.original_mask.astype(np.float32) / 255
+        #     # print("before rescaling", truth.shape)
+        #
+        #     truth = cv2.resize(truth,
+        #                        dsize=(int(scale * truth.shape[1]),
+        #                               int(scale * truth.shape[0])),
+        #                        interpolation=cv2.INTER_LINEAR)
+        #
+        #     loss = np_binary_cross_entropy_loss_optimized(probability, truth)
+        #     dice = np_dice_score_optimized(probability, truth)
+        #     tp, tn = np_accuracy_optimized(probability, truth)
+        #
+        #     _tmp = pd.DataFrame(results)
+        #     _tmp.columns = ['id', 'image_name', 'x', 'y', 'dice']
+        #     _tmp.to_csv(submit_dir + f'/{id}.csv')
+        #
+        #     log.write(30 * "-" + '\n')
+        #     log.write('submit_dir = %s \n' % submit_dir)
+        #     log.write('initial_checkpoint = %s \n' % [c.split('2020-12-11')[-1] for c in initial_checkpoint])
+        #     log.write('loss   = %0.8f \n' % loss)
+        #     log.write('dice   = %0.8f \n' % dice)
+        #     log.write('tp, tn = %0.8f, %0.8f \n' % (tp, tn))
+        #     log.write('\n')
+        #
+        # elif server == 'kaggle':
+        #     print('starts predict mask creation')
+        #     probability = cv2.resize(probability, dsize=(width, height), interpolation=cv2.INTER_LINEAR)
+        #     predict = (probability > 0.5).astype(np.uint8)
+        #     del probability
+        #     gc.collect()
+        #     p = rle_encode_less_memory(predict)
+        #     predicted.append(p)
+        #     print("encoding created")
 
     # -----
-    if server == 'kaggle':
-        df['id'] = valid_image_id
-        df['predicted'] = predicted
-        csv_file = submit_dir + f'/submission_{sha}-%s-%s%s.csv' % (out_dir.split('/')[-1], tag, iter_tag)
-        df.to_csv(csv_file, index=False)
-        print(df)
+    # if server == 'kaggle':
+    #     df['id'] = valid_image_id
+    #     df['predicted'] = predicted
+    #     csv_file = submit_dir + f'/submission_{sha}-%s-%s%s.csv' % (out_dir.split('/')[-1], tag, iter_tag)
+    #     df.to_csv(csv_file, index=False)
+    #     print(df)
 
 
 ########################################################################
