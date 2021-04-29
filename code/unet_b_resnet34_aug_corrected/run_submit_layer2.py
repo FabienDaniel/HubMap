@@ -345,7 +345,7 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
     project_repo, raw_data_dir, data_dir = get_data_path(SERVER_RUN)
 
     if SERVER_RUN == 'kaggle':
-        out_dir = '../input/hubmap-checkpoints/'
+        out_dir = f'../input/hubmap-checkpoints/checkpoint_{_sha}'
         result_dir = '/kaggle/working/'
     else:
         out_dir = project_repo + f"/result/Layer_2/fold{'_'.join(map(str, fold))}"
@@ -402,17 +402,20 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
     # ------------------------------------------------------
     # Get checkpoint of the model used to make predictions
     # ------------------------------------------------------
-    if checkpoint_sha is None:
-        tag = ''
+    if SERVER_RUN == 'kaggle':
+        submit_dir = result_dir
     else:
-        tag = checkpoint_sha + '-'
+        if checkpoint_sha is None:
+            tag = ''
+        else:
+            tag = checkpoint_sha + '-'
 
-    if iterations == 'all':
-        submit_dir = result_dir + f'/predictions_{sha}/%s-%s-%smean' % (server, 'all', tag)
-    elif flip_predict:
-        submit_dir = result_dir + f'/predictions_{sha}/%s-%s-%smean' % (server, iter_tag, tag)
-    else:
-        submit_dir = result_dir + f'/predictions_{sha}/%s-%s-%snoflip' % (server, iter_tag, tag)
+        if iterations == 'all':
+            submit_dir = result_dir + f'/predictions_{sha}/%s-%s-%smean' % (server, 'all', tag)
+        elif flip_predict:
+            submit_dir = result_dir + f'/predictions_{sha}/%s-%s-%smean' % (server, iter_tag, tag)
+        else:
+            submit_dir = result_dir + f'/predictions_{sha}/%s-%s-%snoflip' % (server, iter_tag, tag)
 
     os.makedirs(submit_dir, exist_ok=True)
 

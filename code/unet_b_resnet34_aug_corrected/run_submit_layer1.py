@@ -16,9 +16,14 @@ from rasterio.windows import Window
 from torch.nn.parallel.data_parallel import data_parallel
 from datetime import datetime
 
+# import warnings
+
+# warnings.filterwarnings("ignore")
+
+os.environ['PYTHONWARNINGS'] = 'ignore'
+
 SERVER_RUN = 'local'
 DEBUG = False
-
 
 if SERVER_RUN == 'local':
     from code.data_preprocessing.dataset_v2020_11_12 import make_image_id, \
@@ -32,12 +37,15 @@ if SERVER_RUN == 'local':
 elif SERVER_RUN == 'kaggle':
     IDENTIFIER = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
 
-#     Let's see what we have in our imported directory
+    #     Let's see what we have in our imported directory
     os.system('pip install ../input/offline-packages-hubmap/imutils-0.5.4')
 
     from hubmap_v2 import rle_encode, rle_encode_less_memory, get_data_path, read_mask, to_mask, make_image_id
     from utility_hubmap import Logger, time_to_str
     from hubmap_model import Net, np_binary_cross_entropy_loss_optimized, np_dice_score_optimized, np_accuracy_optimized
+
+    print(os.listdir())
+    print(os.listdir('../input/'))
 
 import imutils
 
@@ -105,7 +113,6 @@ class TileGenerator:
         print(f"nb width step: {np.floor((self.width - self.size) / step)}")
         print(f"nb height step: {np.floor((self.height - self.size) / step)}")
 
-
         xx = np.array_split(np.arange(half, self.width - half), np.floor((self.width - self.size) / step))
         yy = np.array_split(np.arange(half, self.height - half), np.floor((self.height - self.size) / step))
         xx = [int(x[0]) for x in xx] + [self.width - half]
@@ -115,7 +122,7 @@ class TileGenerator:
         print(f'nb of images: {len(self.centroid_list)}')
 
         if DEBUG:
-            self.centroid_list = self.centroid_list[:5]
+            self.centroid_list = self.centroid_list[::8]
 
     def get_next(self):
         for cX, cY in self.centroid_list:
@@ -125,13 +132,12 @@ class TileGenerator:
             vv = cv2.cvtColor(sub_image.astype(np.float32), cv2.COLOR_RGB2HSV)
 
             if vv.mean() < 0.25:
-                print(f"skips coord: ({cX}, {cY}); saturation = {vv.mean()}"+20 * " ", end='\r')
+                print(f"skips coord: ({cX}, {cY}); saturation = {vv.mean()}" + 20 * " ", end='\r')
                 yield {
                     'tile_image': None,
                     'tile_mask': None,
                     'centroids': [cX, cY, 1],
                 }
-
 
             if self.server == 'local':
                 sub_mask = self.original_mask[
@@ -367,7 +373,7 @@ def submit(sha, server, iterations, fold, scale,
     project_repo, raw_data_dir, data_dir = get_data_path(SERVER_RUN)
 
     if SERVER_RUN == 'kaggle':
-        out_dir = '../input/hubmap-checkpoints/'
+        out_dir = f'../input/hubmap-checkpoints/checkpoint_{checkpoint_sha}/'
         result_dir = '/kaggle/working/'
     else:
         out_dir = project_repo + f"/result/Layer_1/fold{'_'.join(map(str, fold))}"
@@ -424,18 +430,20 @@ def submit(sha, server, iterations, fold, scale,
     # ------------------------------------------------------
     # Get checkpoint of the model used to make predictions
     # ------------------------------------------------------
-    if checkpoint_sha is None:
-        tag = ''
+    if SERVER_RUN == 'kaggle':
+        submit_dir = result_dir
     else:
-        tag = checkpoint_sha + '-'
+        if checkpoint_sha is None:
+            tag = ''
+        else:
+            tag = checkpoint_sha + '-'
 
-    if iterations == 'all':
-        submit_dir = result_dir + f'/predictions_{sha}/%s-%s-%smean' % (server, 'all', tag)
-    elif flip_predict:
-        submit_dir = result_dir + f'/predictions_{sha}/%s-%s-%smean' % (server, iter_tag, tag)
-    else:
-        submit_dir = result_dir + f'/predictions_{sha}/%s-%s-%snoflip' % (server, iter_tag, tag)
-
+        if iterations == 'all':
+            submit_dir = result_dir + f'/predictions_{sha}/%s-%s-%smean' % (server, 'all', tag)
+        elif flip_predict:
+            submit_dir = result_dir + f'/predictions_{sha}/%s-%s-%smean' % (server, iter_tag, tag)
+        else:
+            submit_dir = result_dir + f'/predictions_{sha}/%s-%s-%snoflip' % (server, iter_tag, tag)
     os.makedirs(submit_dir, exist_ok=True)
 
     log = Logger()
@@ -478,6 +486,8 @@ def submit(sha, server, iterations, fold, scale,
         log.write(50 * "=" + "\n")
         log.write(f"Inference for image: {id} \n")
 
+        #         if id != 'd488c759a': continue
+
         ###############
         # Define tiles
         ###############
@@ -495,9 +505,14 @@ def submit(sha, server, iterations, fold, scale,
         ##############################################
         for index, tile in enumerate(tiles.get_next()):
 
-            print('\r %s: n°%d %s' %
-                  (ind, index, time_to_str(timer() - start_timer, 'sec')),
-                  end='', flush=True)
+            if SERVER_RUN != 'kaggle':
+                print('\r %s: n°%d %s' %
+                      (ind, index, time_to_str(timer() - start_timer, 'sec')),
+                      end='', flush=True)
+            elif index % 10 == 0:
+                print('\r %s: n°%d %s' %
+                      (ind, index, time_to_str(timer() - start_timer, 'sec')),
+                      end='', flush=True)
 
             if tile['tile_image'] is None:
                 tile_probability.append(np.zeros((tile_size, tile_size)))
@@ -532,14 +547,17 @@ def submit(sha, server, iterations, fold, scale,
                         server,
                         submit_dir,
                         save_to_disk=last_iter,
-                        resize_scale=800/tile_size
+                        resize_scale=800 / tile_size
                     )
                     if last_iter:
                         results.append([id, image_name, x0, y0, dice])
 
-            # if index == 2: sys.exit()
+            del net, state_dict, image_probability
+            gc.collect()
 
             _probas = np.mean(overall_probabilities, axis=0)
+            del overall_probabilities
+            gc.collect()
             tile_probability.append(_probas)
             # print(_probas.shape)
 
@@ -568,61 +586,17 @@ def submit(sha, server, iterations, fold, scale,
         # Saves the numpy array that contains probabilities
         # np.savez_compressed(submit_dir + f'/proba_{id}.npy', probability=probability)
 
-
         predict = (probability > proba_threshold).astype(np.float32)
         cv2.imwrite(submit_dir + '/%s.probability.png' % id, (probability * 255).astype(np.uint8))
         cv2.imwrite(submit_dir + '/%s.predict.png' % id, (predict * 255).astype(np.uint8))
-
-
-        # --- show results ---
-        # if server == 'local':
-        #     truth = tiles.original_mask.astype(np.float32) / 255
-        #     # print("before rescaling", truth.shape)
-        #
-        #     truth = cv2.resize(truth,
-        #                        dsize=(int(scale * truth.shape[1]),
-        #                               int(scale * truth.shape[0])),
-        #                        interpolation=cv2.INTER_LINEAR)
-        #
-        #     loss = np_binary_cross_entropy_loss_optimized(probability, truth)
-        #     dice = np_dice_score_optimized(probability, truth)
-        #     tp, tn = np_accuracy_optimized(probability, truth)
-        #
-        #     _tmp = pd.DataFrame(results)
-        #     _tmp.columns = ['id', 'image_name', 'x', 'y', 'dice']
-        #     _tmp.to_csv(submit_dir + f'/{id}.csv')
-        #
-        #     log.write(30 * "-" + '\n')
-        #     log.write('submit_dir = %s \n' % submit_dir)
-        #     log.write('initial_checkpoint = %s \n' % [c.split('2020-12-11')[-1] for c in initial_checkpoint])
-        #     log.write('loss   = %0.8f \n' % loss)
-        #     log.write('dice   = %0.8f \n' % dice)
-        #     log.write('tp, tn = %0.8f, %0.8f \n' % (tp, tn))
-        #     log.write('\n')
-        #
-        # elif server == 'kaggle':
-        #     print('starts predict mask creation')
-        #     probability = cv2.resize(probability, dsize=(width, height), interpolation=cv2.INTER_LINEAR)
-        #     predict = (probability > 0.5).astype(np.uint8)
-        #     del probability
-        #     gc.collect()
-        #     p = rle_encode_less_memory(predict)
-        #     predicted.append(p)
-        #     print("encoding created")
-
-    # -----
-    # if server == 'kaggle':
-    #     df['id'] = valid_image_id
-    #     df['predicted'] = predicted
-    #     csv_file = submit_dir + f'/submission_{sha}-%s-%s%s.csv' % (out_dir.split('/')[-1], tag, iter_tag)
-    #     df.to_csv(csv_file, index=False)
-    #     print(df)
 
 
 ########################################################################
 # main #################################################################
 ########################################################################
 if __name__ == '__main__':
+
+    DEBUG = False
 
     if SERVER_RUN == 'local':
         # Initialize parser
@@ -670,25 +644,26 @@ if __name__ == '__main__':
         #
         # else:
         submit(model_sha,
-               server          = args.Server,
-               iterations      = args.Iterations,
-               fold            = fold,
-               scale           = 0.5,
-               flip_predict    = args.flip,
-               checkpoint_sha  = args.CheckpointSha,
-               backbone        = 'efficientnet-b0',
-               proba_threshold = 0.2,
+               server=args.Server,
+               iterations=args.Iterations,
+               fold=fold,
+               scale=0.5,
+               flip_predict=args.flip,
+               checkpoint_sha=args.CheckpointSha,
+               backbone='efficientnet-b0',
+               proba_threshold=0.2,
                )
 
     elif SERVER_RUN == 'kaggle':
-        submit('ae731b8de',
-               server          = 'kaggle',
-               iterations      = 'top3',
-               fold            = [''],
-               scale           = 0.5,
-               flip_predict    = True,
-               checkpoint_sha  = 'ae731b8de',
-               backbone        = 'efficientnet-b0',
-               proba_threshold = 0.2,
+        #         pass
+        submit(None,
+               server='kaggle',
+               iterations='top1',
+               fold=[''],
+               scale=0.5,
+               flip_predict=False,
+               checkpoint_sha='5c41601f7',
+               backbone='efficientnet-b0',
+               proba_threshold=0.2,
                )
 

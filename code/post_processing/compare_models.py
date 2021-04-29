@@ -87,19 +87,36 @@ if __name__ == '__main__':
     submission = []
     file_count = 1
     for model in models:
-        directory = f"result/{model}/fold{args.fold}"
-        print(60*"=")
-        print(f"predictions available for fold n°{args.fold}, model '{model}':")
-        print(60*'=')
+        if model == 'kaggle':
+            directory = 'result/Kaggle_download/'
 
-        options = []
-        i = 0
-        for _file in [f for f in os.listdir(directory) if 'predictions' in f]:
-            for _subdir in os.listdir(os.path.join(directory, _file)):
-                if not 'kaggle' in _subdir: continue
-                print(f"choice n°{i}:", os.path.join(_file, _subdir))
-                options.append(os.path.join(_file, _subdir))
+            print(60 * "=")
+            print(f"predictions available for model '{model}':")
+            print(60 * '=')
+
+            options = []
+            i = 0
+            for _file in [f for f in os.listdir(directory) if '.csv' in f]:
+                print(f"choice n°{i}:", _file)
+                options.append(_file)
                 i += 1
+
+        else:
+            directory = f"result/{model}/fold{args.fold}"
+            print(60*"=")
+            print(f"predictions available for fold n°{args.fold}, model '{model}':")
+            print(60*'=')
+
+            options = []
+            i = 0
+            for _file in [f for f in os.listdir(directory) if 'predictions' in f]:
+                for _subdir in os.listdir(os.path.join(directory, _file)):
+                    if not 'kaggle' in _subdir: continue
+                    print(f"choice n°{i}:", os.path.join(_file, _subdir))
+                    options.append(os.path.join(_file, _subdir))
+                    i += 1
+
+        # print(options)
 
         print(35 * '-')
         while True:
@@ -109,9 +126,17 @@ if __name__ == '__main__':
             # else:
             #     choice = 3
 
+            # print(choice, len(options), model)
+
             try:
+
                 if int(choice) < 0 or int(choice) >= len(options):
                     print("Choice not allowed. ", end='')
+                elif model == 'kaggle':
+                    print('lklkhkl')
+                    pathdir = os.path.join(directory, options[int(choice)])
+                    submission.append(pathdir)
+                    break
                 else:
                     choice = int(choice)
 
