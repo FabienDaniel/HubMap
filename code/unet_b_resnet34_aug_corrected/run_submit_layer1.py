@@ -67,7 +67,7 @@ def get_probas(net, tile_image, flip_predict):
         if flip_predict:  # inference sur les images inversées / axes x et y
             for _dim in [(2,), (3,), (2, 3)]:
                 _logit = data_parallel(net, m.flip(dims=_dim))
-                p.append(_logit.flip(dims=_dim))
+                p.append(torch.sigmoid(_logit).flip(dims=_dim))
 
     p = torch.stack(p).mean(0)
     p = p.squeeze()
@@ -119,9 +119,9 @@ class TileGenerator:
         xx = [int(x[0]) for x in xx] + [self.width - half]
         yy = [int(y[0]) for y in yy] + [self.height - half]
         self.centroid_list = [[cx, cy] for cx in xx for cy in yy]
-        for index, _pos in enumerate(self.centroid_list):
-            if index % 100 != 0: continue
-            print(index, _pos)
+        # for index, _pos in enumerate(self.centroid_list):
+        #     if index % 100 != 0: continue
+        #     print(index, _pos)
 
         print(f'nb of images: {len(self.centroid_list)}')
 
@@ -385,9 +385,9 @@ def submit(sha, server, iterations, fold, scale,
             tag = checkpoint_sha + '-'
 
         if iterations == 'all':
-            submit_dir = result_dir + f'/predictions_{sha}/%s-%s-%smean' % (server, 'all', tag)
+            submit_dir = result_dir + f'/predictions_{sha}/%s-%s-%smax' % (server, 'all', tag)
         elif flip_predict:
-            submit_dir = result_dir + f'/predictions_{sha}/%s-%s-%smean' % (server, iter_tag, tag)
+            submit_dir = result_dir + f'/predictions_{sha}/%s-%s-%smax' % (server, iter_tag, tag)
         else:
             submit_dir = result_dir + f'/predictions_{sha}/%s-%s-%snoflip' % (server, iter_tag, tag)
     os.makedirs(submit_dir, exist_ok=True)
@@ -507,7 +507,13 @@ def submit(sha, server, iterations, fold, scale,
                     if last_iter:
                         results.append([id, image_name, x0, y0, dice])
 
-            _probas = np.mean(overall_probabilities, axis=0)
+            # print(np.max(overall_probabilities, axis=0)[:3])
+            # print()
+            # print(np.mean(overall_probabilities, axis=0)[:3])
+
+            # sys.exit()
+
+            _probas = np.max(overall_probabilities, axis=0)
             tile_probability.append(_probas.astype(np.float32))
             del overall_probabilities, _probas
             del net, state_dict, image_probability
@@ -529,8 +535,13 @@ def submit(sha, server, iterations, fold, scale,
                               tile_size,
                               tile_average_step,
                               tile_min_score,
-                              aggregate='mean'
+                              aggregate='max'
                               )
+
+        # print(probability.min())
+        # print(probability.max())
+        # sys.exit()
+
 
         predict = (probability > proba_threshold).astype(np.uint8)
         cv2.imwrite(submit_dir + '/%s.probability.png' % id, (probability * 255).astype(np.uint8))
