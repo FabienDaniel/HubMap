@@ -587,7 +587,7 @@ if __name__ == '__main__':
             sha               = model_sha,
             fold              = fold,
             start_lr          = 0.0001,
-            batch_size        = 16,
+            batch_size        = 8,
             num_iteration     = int(args.iterations),
             iter_log          = 250,
             iter_save         = 250,
@@ -596,6 +596,6 @@ if __name__ == '__main__':
             tile_scale        = 0.25,
             tile_size         = 320,
             image_size        = 256,
-            backbone          = 'efficientnet-b0',
+            backbone          = 'efficientnet-b1',
         )
 
