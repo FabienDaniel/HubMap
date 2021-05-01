@@ -303,10 +303,10 @@ def result_bookeeping(id, tile_probability, overall_probabilities,
     else:
         dice = None
 
-    image_show_norm('overlay2',
-                    overlay2,
-                    min=0, max=1, resize=resize_scale)
-    cv2.waitKey(1)
+    #     image_show_norm('overlay2',
+    #                     overlay2,
+    #                     min=0, max=1, resize=resize_scale)
+    #     cv2.waitKey(1)
 
     # df = pd.DataFrame(tile_scores, columns=['tile', 'image', 'x', 'y', 'dice'])
     # df.to_csv(submit_dir + f'/{id}_scores.csv')
@@ -410,7 +410,7 @@ def submit(sha, server, iterations, fold, scale,
     ##########################################################################################
     # Define prediction parameters -----------------------------------------------------------
     ##########################################################################################
-    tile_size = 256 * 2       # taille dans le système scalé
+    tile_size = 256 * 3  # taille dans le système scalé
     tile_average_step = 320
     tile_min_score = 0.25
 
@@ -434,7 +434,6 @@ def submit(sha, server, iterations, fold, scale,
 
         # if id != '3589adb90': continue
 
-
         ###############
         # Define tiles
         ###############
@@ -451,20 +450,13 @@ def submit(sha, server, iterations, fold, scale,
         ### Iterate on sub-images with scaled sizes
         ##############################################
 
-        # image_tiles = []
-
         for index, tile in enumerate(tiles.get_next()):
-
-            # if index % 25 != 0:
-            #     # image_tiles.append(None)
-            #     tile_probability.append(None)
-            #     continue
 
             if SERVER_RUN != 'kaggle':
                 print('\r %s: n°%d %s' %
                       (ind, index, time_to_str(timer() - start_timer, 'sec')),
                       end='', flush=True)
-            elif index % 10 == 0:
+            elif index % 100 == 0:
                 print('\r %s: n°%d %s' %
                       (ind, index, time_to_str(timer() - start_timer, 'sec')),
                       end='', flush=True)
@@ -509,23 +501,17 @@ def submit(sha, server, iterations, fold, scale,
                         tile['centroids'],
                         server,
                         submit_dir,
-                        save_to_disk = last_iter,
-                        resize_scale = 800 / tile_size
+                        save_to_disk=last_iter,
+                        resize_scale=800 / tile_size
                     )
                     if last_iter:
                         results.append([id, image_name, x0, y0, dice])
 
-            # image_tiles.append(tile['tile_image'])
-
-
-            if len(overall_probabilities) == 1:
-                _probas = image_probability[:, :]
-            else:
-                _probas = np.mean(overall_probabilities, axis=0)
-            del overall_probabilities, net, state_dict, image_probability
+            _probas = np.mean(overall_probabilities, axis=0)
+            tile_probability.append(_probas.astype(np.float32))
+            del overall_probabilities, _probas
+            del net, state_dict, image_probability
             gc.collect()
-            tile_probability.append(_probas)
-            # print(_probas.shape)
 
         ###############################################################################
         # Concatène les sous images et recrée une image conforme à la taille initiale
@@ -543,20 +529,14 @@ def submit(sha, server, iterations, fold, scale,
                               tile_size,
                               tile_average_step,
                               tile_min_score,
-                              aggregate='mean',
-                              # image=image_tiles,
+                              aggregate='mean'
                               )
 
-        # print(probability.shape)
-        # sys.exit()
-
-        # -------------------------------------------------
-        # Saves the numpy array that contains probabilities
-        # np.savez_compressed(submit_dir + f'/proba_{id}.npy', probability=probability)
-
-        predict = (probability > proba_threshold).astype(np.float32)
+        predict = (probability > proba_threshold).astype(np.uint8)
         cv2.imwrite(submit_dir + '/%s.probability.png' % id, (probability * 255).astype(np.uint8))
-        cv2.imwrite(submit_dir + '/%s.predict.png' % id, (predict * 255).astype(np.uint8))
+        cv2.imwrite(submit_dir + '/%s.predict.png' % id, (predict * 255))
+        del predict, probability
+        gc.collect()
 
 
 ########################################################################
@@ -604,23 +584,23 @@ if __name__ == '__main__':
         model_sha = repo.head.object.hexsha[:9]
         print(f"current commit: {model_sha}")
 
-        # changedFiles = [item.a_path for item in repo.index.diff(None) if item.a_path.endswith(".py")]
-        # if len(changedFiles) > 0:
-        #     print("ABORT submission -- There are unstaged files:")
-        #     for _file in changedFiles:
-        #         print(f" * {_file}")
-        #
-        # else:
-        submit(model_sha,
-               server=args.Server,
-               iterations=args.Iterations,
-               fold=fold,
-               scale=0.5,
-               flip_predict=args.flip,
-               checkpoint_sha=args.CheckpointSha,
-               backbone='efficientnet-b0',
-               proba_threshold=0.2,
-               )
+        changedFiles = [item.a_path for item in repo.index.diff(None) if item.a_path.endswith(".py")]
+        if len(changedFiles) > 0:
+            print("ABORT submission -- There are unstaged files:")
+            for _file in changedFiles:
+                print(f" * {_file}")
+
+        else:
+            submit(model_sha,
+                   server=args.Server,
+                   iterations=args.Iterations,
+                   fold=fold,
+                   scale=0.25,
+                   flip_predict=args.flip,
+                   checkpoint_sha=args.CheckpointSha,
+                   backbone='efficientnet-b0',
+                   proba_threshold=0.15,
+                   )
 
     elif SERVER_RUN == 'kaggle':
         #         pass
