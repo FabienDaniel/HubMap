@@ -142,21 +142,38 @@ def to_mask(tile, coord, height, width, scale, size, step, min_score, aggregate=
 
         for t, (cx, cy) in enumerate(coord):
 
-            # print(cx, cy, half, tile[t].shape, w.shape)
+            # if image is not None and image[t] is None: continue
+            # # print(cx, cy, half, tile[t].shape, w.shape)
+            #
+            # if image is not None and image[t] is not None:
+            #     print(2 * cx, 2 * cy)
+            #
+            #
+            #     overlay2 = draw_contour_overlay(
+            #         np.ascontiguousarray(image[t].transpose(1, 2, 0)).astype(np.float32),
+            #         tile[t].astype(np.float32),
+            #         color=(0, 1, 0),
+            #         thickness=6
+            #     )
+            #
+            #     image_show_norm('inside mask',
+            #                     overlay2,
+            #                     min=0, max=1, resize=0.5)
+            #     cv2.waitKey(0)
 
             mask [cy - half:cy + half, cx - half:cx + half] += tile[t] * w
             count[cy - half:cy + half, cx - half:cx + half] += w
 
-            print(f"{t} / {len(coord)}",
-                  sys.getsizeof(mask) * 1e-6, 'Mb',
-                  sys.getsizeof(count) * 1e-6, 'Mb', end='\r')
+            # print(f"{t} / {len(coord)}",
+            #       sys.getsizeof(mask) * 1e-6, 'Mb',
+            #       sys.getsizeof(count) * 1e-6, 'Mb', end='\r')
 
 
             # see unet paper for "Overlap-tile strategy for seamless segmentation of arbitrary large images"
 
         # m = (count != 0)
         # mask[m] /= count[m]
-        print(sys.getsizeof(mask) * 1e-6, 'Mb', sys.getsizeof(count) * 1e-6, 'Mb')
+        # print(sys.getsizeof(mask) * 1e-6, 'Mb', sys.getsizeof(count) * 1e-6, 'Mb')
 
         length = 100
         for i in range(mask.shape[0] // length + 1):

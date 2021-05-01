@@ -110,6 +110,7 @@ class TileGenerator:
         half = self.size // 2
         step = self.size * 0.8
 
+        print(f"image size: {self.size}")
         print(f"nb width step: {np.floor((self.width - self.size) / step)}")
         print(f"nb height step: {np.floor((self.height - self.size) / step)}")
 
@@ -118,6 +119,9 @@ class TileGenerator:
         xx = [int(x[0]) for x in xx] + [self.width - half]
         yy = [int(y[0]) for y in yy] + [self.height - half]
         self.centroid_list = [[cx, cy] for cx in xx for cy in yy]
+        for index, _pos in enumerate(self.centroid_list):
+            if index % 100 != 0: continue
+            print(index, _pos)
 
         print(f'nb of images: {len(self.centroid_list)}')
 
@@ -129,15 +133,8 @@ class TileGenerator:
 
             sub_image, _ = self.image_loader[(cX - self.size // 2, cY - self.size // 2)]
 
-            vv = cv2.cvtColor(sub_image.astype(np.float32), cv2.COLOR_RGB2HSV)
-
-            if vv.mean() < 0.25:
-                print(f"skips coord: ({cX}, {cY}); saturation = {vv.mean()}" + 20 * " ", end='\r')
-                yield {
-                    'tile_image': None,
-                    'tile_mask': None,
-                    'centroids': [cX, cY, 1],
-                }
+            hsv = cv2.cvtColor(sub_image.astype(np.float32), cv2.COLOR_RGB2HSV)
+            h, s, v = [c.mean() for c in cv2.split(hsv)]
 
             if self.server == 'local':
                 sub_mask = self.original_mask[
@@ -165,6 +162,7 @@ class TileGenerator:
                 'tile_image': tile_image,
                 'tile_mask': tile_mask,
                 'centroids': coord,
+                'hsv': [h, s, v]
             }
 
 
@@ -216,9 +214,9 @@ class HuBMAPDataset:
             img[(p00 - y0):(p01 - y0), (p10 - x0):(p11 - x0)] = np.moveaxis(
                 self.data.read([1, 2, 3], window=Window.from_slices((p00, p01), (p10, p11))), 0, -1)
         else:
-            for i, layer in enumerate(self.layers):
+            for i in range(3):
                 img[(p00 - y0):(p01 - y0), (p10 - x0):(p11 - x0), i] = \
-                    layer.read(1, window=Window.from_slices((p00, p01), (p10, p11)))
+                    self.layers[i].read(1, window=Window.from_slices((p00, p01), (p10, p11)))
 
         if self.scale < 1:
             img = cv2.resize(img, dsize=None,
@@ -244,58 +242,6 @@ class HuBMAPDataset:
             return img / norm, -1
         else:
             return img / norm, +1
-
-
-def _get_centroids(layer1_path, image_id, width, height, image_size):
-    # --------------------------------------------------------------
-    # Lecture des prédictions de la layer 1
-    # --------------------------------------------------------------
-    predict = np.array(PIL.Image.open(layer1_path + f'/{image_id}.predict.png'))
-    mask = cv2.resize(predict, dsize=(width, height), interpolation=cv2.INTER_LINEAR)
-    # print(width, height)
-    # print(predict.shape[1] * 4, predict.shape[0] * 4)
-    # sys.exit()
-
-    # ----------------------------------------------------------------------
-    # calcul des contours des glomeruli / aux prédictions de la layer 1
-    # ----------------------------------------------------------------------
-    cnts = cv2.findContours(mask.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    cnts = imutils.grab_contours(cnts)
-
-    print(f"got {len(cnts)} contours")
-
-    # -----------------------------------------
-    # loop over the contours to get centroids
-    # -----------------------------------------
-    centroid_list = []
-    for c in cnts:
-        # ---------------------------------------
-        # compute the center of the contour
-        # ---------------------------------------
-        M = cv2.moments(c)
-        cX = int(M["m10"] / M["m00"])
-        cY = int(M["m01"] / M["m00"])
-
-        # ---------------------------------------
-        # check how close from image boundaries
-        # ---------------------------------------
-        if cX - image_size // 2 < 0:
-            x0 = image_size // 2
-        elif cX + image_size // 2 > width:
-            x0 = width - image_size // 2
-        else:
-            x0 = cX
-
-        if cY - image_size // 2 < 0:
-            y0 = image_size // 2
-        elif cY + image_size // 2 > height:
-            y0 = height - image_size // 2
-        else:
-            y0 = cY
-
-        centroid_list.append([x0, y0])
-
-    return centroid_list
 
 
 def result_bookeeping(id, tile_probability, overall_probabilities,
@@ -464,7 +410,7 @@ def submit(sha, server, iterations, fold, scale,
     ##########################################################################################
     # Define prediction parameters -----------------------------------------------------------
     ##########################################################################################
-    tile_size = 256 * 6
+    tile_size = 256 * 2       # taille dans le système scalé
     tile_average_step = 320
     tile_min_score = 0.25
 
@@ -486,7 +432,8 @@ def submit(sha, server, iterations, fold, scale,
         log.write(50 * "=" + "\n")
         log.write(f"Inference for image: {id} \n")
 
-        #         if id != 'd488c759a': continue
+        # if id != '3589adb90': continue
+
 
         ###############
         # Define tiles
@@ -503,7 +450,15 @@ def submit(sha, server, iterations, fold, scale,
         ##############################################
         ### Iterate on sub-images with scaled sizes
         ##############################################
+
+        # image_tiles = []
+
         for index, tile in enumerate(tiles.get_next()):
+
+            # if index % 25 != 0:
+            #     # image_tiles.append(None)
+            #     tile_probability.append(None)
+            #     continue
 
             if SERVER_RUN != 'kaggle':
                 print('\r %s: n°%d %s' %
@@ -514,7 +469,10 @@ def submit(sha, server, iterations, fold, scale,
                       (ind, index, time_to_str(timer() - start_timer, 'sec')),
                       end='', flush=True)
 
-            if tile['tile_image'] is None:
+            h, s, v = tile['hsv']
+            condition = s > 0.05
+            if s < 0.05:
+                # print(f"image removed, saturation: {s}")
                 tile_probability.append(np.zeros((tile_size, tile_size)))
                 continue
 
@@ -537,6 +495,11 @@ def submit(sha, server, iterations, fold, scale,
                 last_iter = _num == len(initial_checkpoint) - 1
 
                 if SERVER_RUN == 'local':
+
+                    # print('\n', index, tiles.centroid_list[index], tile['hsv'], '\n')
+                    # h, s, v = tile['hsv']
+                    # condition = s > 0.05
+                    # print(f"kept: {condition}")
                     image_name, x0, y0, dice = result_bookeeping(
                         id,
                         image_probability,
@@ -546,17 +509,20 @@ def submit(sha, server, iterations, fold, scale,
                         tile['centroids'],
                         server,
                         submit_dir,
-                        save_to_disk=last_iter,
-                        resize_scale=800 / tile_size
+                        save_to_disk = last_iter,
+                        resize_scale = 800 / tile_size
                     )
                     if last_iter:
                         results.append([id, image_name, x0, y0, dice])
 
-            del net, state_dict, image_probability
-            gc.collect()
+            # image_tiles.append(tile['tile_image'])
 
-            _probas = np.mean(overall_probabilities, axis=0)
-            del overall_probabilities
+
+            if len(overall_probabilities) == 1:
+                _probas = image_probability[:, :]
+            else:
+                _probas = np.mean(overall_probabilities, axis=0)
+            del overall_probabilities, net, state_dict, image_probability
             gc.collect()
             tile_probability.append(_probas)
             # print(_probas.shape)
@@ -577,7 +543,9 @@ def submit(sha, server, iterations, fold, scale,
                               tile_size,
                               tile_average_step,
                               tile_min_score,
-                              aggregate='mean')
+                              aggregate='mean',
+                              # image=image_tiles,
+                              )
 
         # print(probability.shape)
         # sys.exit()
@@ -660,7 +628,7 @@ if __name__ == '__main__':
                server='kaggle',
                iterations='top1',
                fold=[''],
-               scale=0.5,
+               scale=0.25,
                flip_predict=False,
                checkpoint_sha='5c41601f7',
                backbone='efficientnet-b0',
