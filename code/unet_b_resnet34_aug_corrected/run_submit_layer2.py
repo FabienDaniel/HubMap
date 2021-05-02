@@ -1,5 +1,6 @@
 import argparse
 import os
+import gc
 import sys
 from pathlib import Path
 from timeit import default_timer as timer
@@ -16,11 +17,11 @@ from rasterio.windows import Window
 from torch.nn.parallel.data_parallel import data_parallel
 from datetime import datetime
 
-SERVER_RUN = 'local'
+SERVER_RUN = 'kaggle'
 DEBUG = False
 
-
 if SERVER_RUN == 'local':
+
     from code.data_preprocessing.dataset_v2020_11_12 import make_image_id, \
         draw_contour_overlay, image_show_norm
     from code.hubmap_v2 import rle_encode, rle_encode_less_memory, get_data_path, read_mask, to_mask
@@ -32,7 +33,7 @@ if SERVER_RUN == 'local':
 elif SERVER_RUN == 'kaggle':
     IDENTIFIER = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
 
-#     Let's see what we have in our imported directory
+    print("import custom librairies")
     os.system('pip install ../input/offline-packages-hubmap/imutils-0.5.4')
 
     from hubmap_v2 import rle_encode, rle_encode_less_memory, get_data_path, read_mask, to_mask, make_image_id
@@ -40,6 +41,8 @@ elif SERVER_RUN == 'kaggle':
     from hubmap_model import Net, np_binary_cross_entropy_loss_optimized, np_dice_score_optimized, np_accuracy_optimized
 
 import imutils
+
+print("imports done")
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 Image.MAX_IMAGE_PIXELS = None
@@ -59,7 +62,7 @@ def get_probas(net, tile_image, flip_predict):
         if flip_predict:  # inference sur les images inversées / axes x et y
             for _dim in [(2,), (3,), (2, 3)]:
                 _logit = data_parallel(net, m.flip(dims=_dim))
-                p.append(_logit.flip(dims=_dim))
+                p.append(torch.sigmoid(_logit).flip(dims=_dim))
 
     p = torch.stack(p).mean(0)
     p = p.squeeze()
@@ -162,6 +165,7 @@ class HuBMAPDataset:
             if len(subdatasets) > 0:
                 for i, subdataset in enumerate(subdatasets, 0):
                     self.layers.append(rasterio.open(subdataset))
+
         self.shape = self.data.shape
 
         self.width = self.shape[1]
@@ -189,9 +193,12 @@ class HuBMAPDataset:
             img[(p00 - y0):(p01 - y0), (p10 - x0):(p11 - x0)] = np.moveaxis(
                 self.data.read([1, 2, 3], window=Window.from_slices((p00, p01), (p10, p11))), 0, -1)
         else:
-            for i, layer in enumerate(self.layers):
+            #             for i, layer in enumerate(self.layers):
+            #                 img[(p00 - y0):(p01 - y0), (p10 - x0):(p11 - x0), i] = \
+            #                     layer.read(1, window=Window.from_slices((p00, p01), (p10, p11)))
+            for i in range(3):
                 img[(p00 - y0):(p01 - y0), (p10 - x0):(p11 - x0), i] = \
-                    layer.read(1, window=Window.from_slices((p00, p01), (p10, p11)))
+                    self.layers[i].read(1, window=Window.from_slices((p00, p01), (p10, p11)))
 
         if self.scale < 1:
             img = cv2.resize(img, dsize=None,
@@ -341,11 +348,34 @@ def result_bookeeping(id, tile_probability, overall_probabilities,
     return f'y{y0}_x{x0}.png', x0, y0, dice
 
 
+def rle_encode_batched(img):
+    # the image should be transposed
+    pixels = img.T.flatten()
+    # This simplified method requires first and last pixel to be zero
+    pixels[0] = 0
+    pixels[-1] = 0
+    runs = np.where(pixels[1:] != pixels[:-1])[0] + 2
+    runs[1::2] -= runs[::2]
+
+    print("before return")
+
+    length = 100000
+    output = []
+    for i in range(runs.shape[0] // length + 1):
+        i1 = i * length
+        i2 = min((i + 1) * length, runs.shape[0])
+        output.append(' '.join(runs[i1:i2].astype(str).tolist()))
+
+    return ' '.join(output)
+
+
 def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, layer1, backbone):
     project_repo, raw_data_dir, data_dir = get_data_path(SERVER_RUN)
 
+    print("*** starts inference ***")
+
     if SERVER_RUN == 'kaggle':
-        out_dir = f'../input/hubmap-checkpoints/checkpoint_{_sha}'
+        out_dir = f'../input/hubmap-checkpoints/checkpoint_{checkpoint_sha}'
         result_dir = '/kaggle/working/'
     else:
         out_dir = project_repo + f"/result/Layer_2/fold{'_'.join(map(str, fold))}"
@@ -359,9 +389,11 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
         _sha = checkpoint_sha
     else:
         _sha = sha
-    _checkpoint_dir = out_dir + f"/checkpoint_{_sha}/"
-    print("Checkpoint for current inference:", _sha)
-    print(os.listdir(_checkpoint_dir))
+
+    if _sha is not None:
+        _checkpoint_dir = out_dir + f"/checkpoint_{_sha}/"
+        print("Checkpoint for current inference:", _sha)
+        print(os.listdir(_checkpoint_dir))
 
     # --------------------------------------------------------------
     # Verifie les checkpoints à utiliser pour l'inférence:
@@ -369,7 +401,11 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
     # - 'topN' avec N entier
     # - INTEGER (= nb iterations)
     # --------------------------------------------------------------
-    if iterations == 'all':
+
+    if isinstance(iterations, list):
+        initial_checkpoint = iterations
+
+    elif iterations == 'all':
         iter_tag = 'all'
         model_checkpoints = [_file for _file in os.listdir(_checkpoint_dir)]
         initial_checkpoint = [out_dir + f'/checkpoint_{_sha}/{model_checkpoint}'
@@ -437,7 +473,7 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
     ##########################################################################################
     # Define prediction parameters -----------------------------------------------------------
     ##########################################################################################
-    tile_size = 800
+    tile_size = 256 * 2
     tile_average_step = 320
     # tile_scale = 0.25
     tile_min_score = 0.25
@@ -453,12 +489,18 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
     ##################################
     predicted = []
     df = pd.DataFrame()
+    full_size = {}
     start_timer = timer()
 
+    #     effective_ids = []
     for ind, id in enumerate(valid_image_id):
 
         # if ind != 5: continue   # test d'usage de RAM
         # if ind != 0: continue
+
+        #         if id != 'd488c759a': continue
+
+        #         effective_ids.append(id)
 
         log.write(50 * "=" + "\n")
         log.write(f"Inference for image: {id} \n")
@@ -466,8 +508,12 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
         ###############
         # Define tiles
         ###############
-        tiles = TileGenerator(image_id=id, raw_data_dir=raw_data_dir, size=tile_size,
-                              scale=scale, layer1_path=layer1, server=server)
+
+        try:
+            tiles = TileGenerator(image_id=id, raw_data_dir=raw_data_dir, size=tile_size,
+                                  scale=scale, layer1_path=layer1, server=server)
+        except:
+            sys.exit()
 
         print(30 * '-')
         height = tiles.height
@@ -481,9 +527,14 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
         ##############################################
         for index, tile in enumerate(tiles.get_next()):
 
-            print('\r %s: n°%d %s' %
-                  (ind, index, time_to_str(timer() - start_timer, 'sec')),
-                  end='', flush=True)
+            if SERVER_RUN != 'kaggle':
+                print('\r %s: n°%d %s' %
+                      (ind, index, time_to_str(timer() - start_timer, 'sec')),
+                      end='', flush=True)
+            elif index % 50 == 0:
+                print('\r %s: n°%d %s' %
+                      (ind, index, time_to_str(timer() - start_timer, 'sec')),
+                      end='', flush=True)
 
             #######################################
             # Iterates over models.
@@ -518,11 +569,11 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
                     if last_iter:
                         results.append([id, image_name, x0, y0, dice])
 
-            # if index == 2: sys.exit()
-
             _probas = np.mean(overall_probabilities, axis=0)
-            tile_probability.append(_probas)
-            # print(_probas.shape)
+            tile_probability.append(_probas.astype(np.float32))
+            del overall_probabilities, _probas
+            del net, state_dict, image_probability
+            gc.collect()
 
         ###############################################################################
         # Concatène les sous images et recrée une image conforme à la taille initiale
@@ -577,37 +628,52 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
 
         elif server == 'kaggle':
             print('starts predict mask creation')
-            probability = cv2.resize(probability, dsize=(width, height), interpolation=cv2.INTER_LINEAR)
-            predict = (probability > 0.5).astype(np.uint8)
+            print(width, height)
+
+            scaled_width = probability.shape[1]
+            scaled_height = probability.shape[0]
+            full_size[id] = (width, height, scaled_width, scaled_height)
+
+            print(type(probability))
+            print(probability.shape)
+            print(probability[:5])
+
+            #  predict = (probability > 0.5).astype(np.uint8)
+            predict = (probability > 0.5).astype(bool)
+
+            print("predict array created")
+            print('predict array shape:', predict.shape)
+
             del probability
             gc.collect()
-            p = rle_encode_less_memory(predict)
+            p = rle_encode_batched(predict)
             predicted.append(p)
             print("encoding created")
+
+            del predict
+            gc.collect()
 
     # -----
     if server == 'kaggle':
         df['id'] = valid_image_id
         df['predicted'] = predicted
         if SERVER_RUN == 'kaggle':
-            df_submit = pd.read_csv('../input/hubmap-kidney-segmentation/sample_submission.csv', index_col='id')
-            df.set_index('id', inplace=True)
-            df_submit.loc[df.index.values] = df.values
-            df_submit.to_csv('submission.csv')
-
+            csv_file = 'submission_layer2.csv'
         else:
             csv_file = submit_dir + f'/submission_{sha}-%s-%s%s.csv' % (out_dir.split('/')[-1], tag, iter_tag)
 
-
-
         df.to_csv(csv_file, index=False)
         print(df)
+
+    return full_size
 
 
 ########################################################################
 # main #################################################################
 ########################################################################
 if __name__ == '__main__':
+
+    DEBUG = True
 
     if SERVER_RUN == 'local':
         # Initialize parser
@@ -671,13 +737,20 @@ if __name__ == '__main__':
                    )
 
     elif SERVER_RUN == 'kaggle':
-        submit('ae731b8de',
+        #         pass
+        submit(None,
                server='kaggle',
-               iterations='top3',
+               iterations=[
+                   # '../input/hubmap-checkpoints/checkpoint_75b9744fa/checkpoint_75b9744fa/00011750_0.934729_model.pth',
+                   # '../input/hubmap-checkpoints/checkpoint_75b9744fa/checkpoint_75b9744fa/00011500_0.934239_model.pth',
+                   '../input/hubmap-checkpoints/checkpoint_75b9744fa/checkpoint_75b9744fa/00009750_0.934313_model.pth',
+                   # '../input/hubmap-checkpoints/checkpoint_75b9744fa/checkpoint_75b9744fa/00009250_0.933873_model.pth',
+                   # '../input/hubmap-checkpoints/checkpoint_75b9744fa/checkpoint_75b9744fa/00011250_0.933255_model.pth',
+               ],
                fold=[''],
                scale=0.5,
                flip_predict=True,
-               checkpoint_sha='ae731b8de',
+               checkpoint_sha=None,
                layer1='../input/hubmap-layer1/',
                backbone='efficientnet-b0',
                )
