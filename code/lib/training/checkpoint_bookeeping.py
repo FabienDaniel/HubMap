@@ -15,11 +15,11 @@ class CheckpointUpdate:
         self.nbest = nbest
         self.best_scores = []
 
-    def update(self, iteration, epoch, score=None):
+    def update(self, iteration, epoch, score=None, max=True):
         if self.nbest is None:
             self._periodic_save(iteration, epoch)
         else:
-            self._best_score_save(iteration, epoch, score)
+            self._best_score_save(iteration, epoch, score, max)
 
     def _periodic_save(self, iteration, epoch):
         if iteration > self.first_iter_save:
@@ -29,7 +29,7 @@ class CheckpointUpdate:
                 'epoch': epoch,
             }, self.directory + f'/%08d_model.pth' % iteration)
 
-    def _best_score_save(self, iteration, epoch, score):
+    def _best_score_save(self, iteration, epoch, score, max):
 
         # if iteration not in self.iter_save: return
         if iteration <= self.first_iter_save: return
@@ -46,9 +46,16 @@ class CheckpointUpdate:
             _tmp = np.array(self.best_scores)
             min_score = _tmp[:, 0].astype(float).min()
             min_index = _tmp[:, 0].astype(float).argmin()
+            max_score = _tmp[:, 0].astype(float).max()
+            max_index = _tmp[:, 0].astype(float).argmax()
 
-            if score > min_score:
+            if score > min_score and max:
                 _, model_to_remove, _ = self.best_scores.pop(min_index)
+                os.remove(os.path.join(self.directory, model_to_remove))
+                self.best_scores.append([score, _name, iteration])
+                save = True
+            elif score > max_score and not max:
+                _, model_to_remove, _ = self.best_scores.pop(max_index)
                 os.remove(os.path.join(self.directory, model_to_remove))
                 self.best_scores.append([score, _name, iteration])
                 save = True

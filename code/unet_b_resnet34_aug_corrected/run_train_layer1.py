@@ -92,8 +92,8 @@ def do_valid(net, valid_loader):
     dice = np_dice_score(probability, mask)
 
     # print('3', timer() - start_timer)
-    tp, tn = np_accuracy(probability, mask)
-    return [dice, loss, tp, tn]
+    tp, tn, fp, fn = np_accuracy(probability, mask)
+    return [dice, loss, tp, tn, fp, fn]
 
 
 ###################################################################################
@@ -384,11 +384,9 @@ def run_train(show_valid_images=False,
     log.write('   batch_size = %d \n' % batch_size)
     log.write('   num_iterations = %d \n' % num_iteration)
     log.write('   experiment = %s\n' % str(__file__.split('/')[-2:]))
-    log.write('                     |-------------- VALID---------|---- TRAIN/BATCH ----------------\n')
-    log.write('rate     iter  epoch | dice   loss   tp     tn     | loss           | time           \n')
-    log.write('-------------------------------------------------------------------------------------\n')
-
-    # 0.00100   0.50  0.80 | 0.891  0.020  0.000  0.000  | 0.000  0.000   |  0 hr 02 min
+    log.write('                     |-------------- VALID----------------------|---- TRAIN/BATCH ----------------\n')
+    log.write('rate     iter  epoch | dice   loss   tp     tn     fp     fn    | loss           | time           \n')
+    log.write('--------------------------------------------------------------------------------------------------\n')
 
     def message(mode='print'):
         if iteration % iter_valid == 0 and iteration > 0:
@@ -402,14 +400,14 @@ def run_train(show_valid_images=False,
 
         text = \
             '%0.5f  %5.2f%s %4.2f | ' % (rate, iteration / 1000, asterisk, epoch,) + \
-            '%4.3f  %4.3f  %4.3f  %4.3f  | ' % (*valid_loss,) + \
+            '%4.3f  %4.3f  %4.3f  %4.3f  %4.3f  %4.3f | ' % (*valid_loss,) + \
             '%4.3f  %4.3f   | ' % (*loss,) + \
             '%s' % (time_to_str(timer() - start_timer, 'min'))
 
         return text
 
     # ----
-    valid_loss = np.zeros(4, np.float32)
+    valid_loss = np.zeros(6, np.float32)
     train_loss = np.zeros(2, np.float32)
     batch_loss = np.zeros_like(train_loss)
     sum_train_loss = np.zeros_like(train_loss)
@@ -440,7 +438,7 @@ def run_train(show_valid_images=False,
                     epoch=epoch,
                     score=valid_loss[0]
                 )
-
+                print(valid_loss)
                 # sys.exit()
 
             if iteration % iter_log == 0 and iteration > 0:
@@ -587,7 +585,7 @@ if __name__ == '__main__':
             sha               = model_sha,
             fold              = fold,
             start_lr          = 0.0001,
-            batch_size        = 8,
+            batch_size        = 16,
             num_iteration     = int(args.iterations),
             iter_log          = 250,
             iter_save         = 250,
@@ -596,6 +594,6 @@ if __name__ == '__main__':
             tile_scale        = 0.25,
             tile_size         = 320,
             image_size        = 256,
-            backbone          = 'efficientnet-b1',
+            backbone          = 'efficientnet-b0',
         )
 
