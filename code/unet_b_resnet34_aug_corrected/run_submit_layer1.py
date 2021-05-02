@@ -343,7 +343,12 @@ def submit(sha, server, iterations, fold, scale,
     # - 'topN' avec N entier
     # - INTEGER (= nb iterations)
     # --------------------------------------------------------------
-    if iterations == 'all':
+
+    if isinstance(iterations, list):
+        iter_tag = 'custom'
+        initial_checkpoint = iterations
+
+    elif iterations == 'all':
         iter_tag = 'all'
         model_checkpoints = [_file for _file in os.listdir(_checkpoint_dir)]
         initial_checkpoint = [out_dir + f'/checkpoint_{_sha}/{model_checkpoint}'
@@ -562,7 +567,7 @@ if __name__ == '__main__':
         parser = argparse.ArgumentParser()
 
         # Adding optional argument
-        parser.add_argument("-i", "--Iterations", help="number of iterations")
+        parser.add_argument("-i", "--Iterations", nargs="+", help="number of iterations")
         parser.add_argument("-s", "--Server", help="run mode: server or kaggle")
         parser.add_argument("-f", "--fold", help="fold")
         parser.add_argument("-r", "--flip", help="flip image and merge", default=True)
