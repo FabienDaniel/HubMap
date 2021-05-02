@@ -424,7 +424,7 @@ def run_train(show_valid_images=False,
         # iter_save=iter_save,
         out_dir=out_dir,
         sha=sha,
-        nbest=5
+        nbest=5,
     )
 
     while iteration < num_iteration:
@@ -436,9 +436,9 @@ def run_train(show_valid_images=False,
                 bookeeping.update(
                     iteration=iteration,
                     epoch=epoch,
-                    score=valid_loss[0]
+                    score=valid_loss[5],
+                    max=False
                 )
-                print(valid_loss)
                 # sys.exit()
 
             if iteration % iter_log == 0 and iteration > 0:
@@ -540,7 +540,7 @@ def run_train(show_valid_images=False,
 if __name__ == '__main__':
 
     # Setting seed
-    seed = 33
+    seed = 34
     random.seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
     np.random.seed(seed)

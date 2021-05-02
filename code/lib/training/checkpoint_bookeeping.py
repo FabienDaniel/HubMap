@@ -54,7 +54,7 @@ class CheckpointUpdate:
                 os.remove(os.path.join(self.directory, model_to_remove))
                 self.best_scores.append([score, _name, iteration])
                 save = True
-            elif score > max_score and not max:
+            elif score < max_score and not max:
                 _, model_to_remove, _ = self.best_scores.pop(max_index)
                 os.remove(os.path.join(self.directory, model_to_remove))
                 self.best_scores.append([score, _name, iteration])
