@@ -540,7 +540,7 @@ def run_train(show_valid_images=False,
 if __name__ == '__main__':
 
     # Setting seed
-    seed = 34
+    seed = 35
     random.seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
     np.random.seed(seed)
