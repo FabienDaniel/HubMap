@@ -77,7 +77,7 @@ def np_accuracy(probability, mask):
     fn = (t * (1-p)).sum() / t.sum()
     fp = ((1-t) * p).sum() / (1-t).sum()
 
-    return tp, tn, fn, fp
+    return tp, tn, fp, fn
 
 
 def np_accuracy_optimized(probability, mask):
