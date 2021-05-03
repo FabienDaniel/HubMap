@@ -6,7 +6,7 @@ import git
 
 from code.common import COMMON_STRING, DataLoader, RandomSampler, SequentialSampler
 from code.data_preprocessing.dataset_v2020_11_12 import HuDataset, make_image_id, null_collate, train_augment, \
-    CenteredHuDataset, train_albu_augment, get_data_path, val_albu_augment
+    CenteredHuDataset, train_albu_augment, get_data_path, val_albu_augment, train_albu_augment_layer1
 from code.lib.utility.draw import image_show_norm
 from code.lib.utility.file import Logger, time_to_str
 from code.lib.training.checkpoint_bookeeping import CheckpointUpdate
@@ -271,7 +271,7 @@ def run_train(show_valid_images=False,
     train_dataset = CenteredHuDataset(
         images      = train_set,
         image_size  = image_size,
-        augment     = train_albu_augment,
+        augment     = train_albu_augment_layer1,
         logger      = log
     )
     train_loader = DataLoader(
