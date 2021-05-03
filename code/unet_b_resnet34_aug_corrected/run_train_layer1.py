@@ -449,6 +449,8 @@ def run_train(show_valid_images=False,
             # adjust_learning_rate(optimizer, schduler(iteration))
             rate = get_learning_rate(optimizer)
 
+
+
             # one iteration update  -------------
             batch_size = len(batch['index'])
             mask = batch['mask'].cuda()
@@ -540,7 +542,7 @@ def run_train(show_valid_images=False,
 if __name__ == '__main__':
 
     # Setting seed
-    seed = 35
+    seed = 36
     random.seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
     np.random.seed(seed)
