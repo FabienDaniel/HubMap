@@ -31,6 +31,7 @@ from torch.nn.parallel.data_parallel import data_parallel
 
 import torch.nn as nn
 import torch.cuda.amp as amp
+from torch import optim
 
 
 class AmpNet(Net):
@@ -361,6 +362,7 @@ def run_train(show_valid_images=False,
 
     # optimizer = Lookahead(torch.optim.Adam(filter(lambda p: p.requires_grad, net.parameters()),lr=start_lr))
     optimizer = Lookahead(RAdam(filter(lambda p: p.requires_grad, net.parameters()), lr=start_lr), alpha=0.5, k=5)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=2000, gamma=0.5)
 
     num_iteration = kwargs.get('num_iteration', 5000)   # total nb. of batch used to train the net
     iter_log = kwargs.get('iter_log', 250)              # show results every iter_log
@@ -384,9 +386,9 @@ def run_train(show_valid_images=False,
     log.write('   batch_size = %d \n' % batch_size)
     log.write('   num_iterations = %d \n' % num_iteration)
     log.write('   experiment = %s\n' % str(__file__.split('/')[-2:]))
-    log.write('                     |-------------- VALID----------------------|---- TRAIN/BATCH ----------------\n')
-    log.write('rate     iter  epoch | dice   loss   tp     tn     fp     fn    | loss           | time           \n')
-    log.write('--------------------------------------------------------------------------------------------------\n')
+    log.write('                       |-------------- VALID----------------------|---- TRAIN/BATCH ----------------\n')
+    log.write('rate       iter  epoch | dice   loss   tp     tn     fp     fn    | loss           | time           \n')
+    log.write('----------------------------------------------------------------------------------------------------\n')
 
     def message(mode='print'):
         if iteration % iter_valid == 0 and iteration > 0:
@@ -399,7 +401,7 @@ def run_train(show_valid_images=False,
             loss = train_loss
 
         text = \
-            '%0.5f  %5.2f%s %4.2f | ' % (rate, iteration / 1000, asterisk, epoch,) + \
+            '%0.7f  %5.2f%s %4.2f | ' % (rate, iteration / 1000, asterisk, epoch,) + \
             '%4.3f  %4.3f  %4.3f  %4.3f  %4.3f  %4.3f | ' % (*valid_loss,) + \
             '%4.3f  %4.3f   | ' % (*loss,) + \
             '%s' % (time_to_str(timer() - start_timer, 'min'))
@@ -445,11 +447,9 @@ def run_train(show_valid_images=False,
                 print('\r', end='', flush=True)
                 log.write(message(mode='log') + '\n')
 
-            # learning rate schduler -------------
-            # adjust_learning_rate(optimizer, schduler(iteration))
-            rate = get_learning_rate(optimizer)
 
-
+            rate = scheduler.get_last_lr()[0]
+            # rate = get_learning_rate(optimizer)
 
             # one iteration update  -------------
             batch_size = len(batch['index'])
@@ -479,6 +479,7 @@ def run_train(show_valid_images=False,
                 loss = get_loss(loss_type, logit, mask)
                 loss.backward()
                 optimizer.step()
+                scheduler.step()
 
             ##############################
             # print statistics  ----------
@@ -586,7 +587,7 @@ if __name__ == '__main__':
             show_valid_images = False,
             sha               = model_sha,
             fold              = fold,
-            start_lr          = 0.0001,
+            start_lr          = 0.0005,
             batch_size        = 16,
             num_iteration     = int(args.iterations),
             iter_log          = 250,

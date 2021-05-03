@@ -246,7 +246,7 @@ class HuBMAPDataset:
 
 def result_bookeeping(id, tile_probability, overall_probabilities,
                       tile_mask, image, tile_centroids, server, submit_dir, save_to_disk, resize_scale):
-    probas = np.mean(overall_probabilities, axis=0)
+    probas = np.max(overall_probabilities, axis=0)
 
     Path(submit_dir + f'/{id}').mkdir(parents=True, exist_ok=True)
 
@@ -303,10 +303,10 @@ def result_bookeeping(id, tile_probability, overall_probabilities,
     else:
         dice = None
 
-    #     image_show_norm('overlay2',
-    #                     overlay2,
-    #                     min=0, max=1, resize=resize_scale)
-    #     cv2.waitKey(1)
+        # image_show_norm('overlay2',
+        #                 overlay2,
+        #                 min=0, max=1, resize=resize_scale)
+        # cv2.waitKey(0)
 
     # df = pd.DataFrame(tile_scores, columns=['tile', 'image', 'x', 'y', 'dice'])
     # df.to_csv(submit_dir + f'/{id}_scores.csv')
@@ -333,9 +333,11 @@ def submit(sha, server, iterations, fold, scale,
         _sha = checkpoint_sha
     else:
         _sha = sha
-    _checkpoint_dir = out_dir + f"/checkpoint_{_sha}/"
-    print("Checkpoint for current inference:", _sha)
-    print(os.listdir(_checkpoint_dir))
+
+    if _sha is not None:
+        _checkpoint_dir = out_dir + f"/checkpoint_{_sha}/"
+        print("Checkpoint for current inference:", _sha)
+        print(os.listdir(_checkpoint_dir))
 
     # --------------------------------------------------------------
     # Verifie les checkpoints à utiliser pour l'inférence:
@@ -437,7 +439,7 @@ def submit(sha, server, iterations, fold, scale,
         log.write(50 * "=" + "\n")
         log.write(f"Inference for image: {id} \n")
 
-        # if id != '3589adb90': continue
+        # if id != '2ec3f1bb9': continue
 
         ###############
         # Define tiles
@@ -456,6 +458,10 @@ def submit(sha, server, iterations, fold, scale,
         ##############################################
 
         for index, tile in enumerate(tiles.get_next()):
+
+            # x0, y0 = tile['centroids'][:2]
+            # if y0 != 9381 or x0 != 21384: continue
+
 
             if SERVER_RUN != 'kaggle':
                 print('\r %s: n°%d %s' %
@@ -512,13 +518,17 @@ def submit(sha, server, iterations, fold, scale,
                     if last_iter:
                         results.append([id, image_name, x0, y0, dice])
 
-            # print(np.max(overall_probabilities, axis=0)[:3])
-            # print()
-            # print(np.mean(overall_probabilities, axis=0)[:3])
 
-            # sys.exit()
+
 
             _probas = np.max(overall_probabilities, axis=0)
+
+            # print()
+            # print(_probas.min(), _probas.max())
+            # print(_probas)
+            #
+            # sys.exit()
+
             tile_probability.append(_probas.astype(np.float32))
             del overall_probabilities, _probas
             del net, state_dict, image_probability
@@ -600,23 +610,23 @@ if __name__ == '__main__':
         model_sha = repo.head.object.hexsha[:9]
         print(f"current commit: {model_sha}")
 
-        changedFiles = [item.a_path for item in repo.index.diff(None) if item.a_path.endswith(".py")]
-        if len(changedFiles) > 0:
-            print("ABORT submission -- There are unstaged files:")
-            for _file in changedFiles:
-                print(f" * {_file}")
-
-        else:
-            submit(model_sha,
-                   server=args.Server,
-                   iterations=args.Iterations,
-                   fold=fold,
-                   scale=0.25,
-                   flip_predict=args.flip,
-                   checkpoint_sha=args.CheckpointSha,
-                   backbone='efficientnet-b0',
-                   proba_threshold=0.15,
-                   )
+        # changedFiles = [item.a_path for item in repo.index.diff(None) if item.a_path.endswith(".py")]
+        # if len(changedFiles) > 0:
+        #     print("ABORT submission -- There are unstaged files:")
+        #     for _file in changedFiles:
+        #         print(f" * {_file}")
+        #
+        # else:
+        submit(model_sha,
+               server=args.Server,
+               iterations=args.Iterations,
+               fold=fold,
+               scale=0.25,
+               flip_predict=args.flip,
+               checkpoint_sha=args.CheckpointSha,
+               backbone='efficientnet-b0',
+               proba_threshold=0.15,
+               )
 
     elif SERVER_RUN == 'kaggle':
         #         pass

@@ -6,7 +6,7 @@ import git
 
 from code.common import COMMON_STRING, DataLoader, RandomSampler, SequentialSampler
 from code.data_preprocessing.dataset_v2020_11_12 import HuDataset, make_image_id, null_collate, train_augment, \
-    CenteredHuDataset, train_albu_augment, get_data_path, val_albu_augment
+    CenteredHuDataset, train_albu_augment, get_data_path, val_albu_augment, train_albu_augment_layer2
 from code.lib.utility.draw import image_show_norm
 from code.lib.utility.file import Logger, time_to_str
 from code.lib.training.checkpoint_bookeeping import CheckpointUpdate
@@ -92,7 +92,7 @@ def do_valid(net, valid_loader):
     dice = np_dice_score(probability, mask)
 
     # print('3', timer() - start_timer)
-    tp, tn = np_accuracy(probability, mask)
+    tp, tn, fp, fn = np_accuracy(probability, mask)
     return [dice, loss, tp, tn]
 
 
@@ -275,7 +275,7 @@ def run_train(show_valid_images=False,
     train_dataset = CenteredHuDataset(
         images      = train_set,
         image_size  = image_size,
-        augment     = train_albu_augment,
+        augment     = train_albu_augment_layer2,
         logger      = log
     )
     train_loader = DataLoader(
@@ -366,6 +366,13 @@ def run_train(show_valid_images=False,
     # optimizer = Lookahead(torch.optim.Adam(filter(lambda p: p.requires_grad, net.parameters()),lr=start_lr))
     optimizer = Lookahead(RAdam(filter(lambda p: p.requires_grad, net.parameters()), lr=start_lr), alpha=0.5, k=5)
 
+    # scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=2000, gamma=0.5)
+
+    lambda1 = lambda epoch: 0.5 ** (epoch // 2000 + 1) if epoch < 8000 else 0.05
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda1)
+
+
+
     num_iteration = kwargs.get('num_iteration', 5000)   # total nb. of batch used to train the net
     iter_log = kwargs.get('iter_log', 250)              # show results every iter_log
     first_iter_save = kwargs.get('first_iter_save', 0)  # first checkpoint kept
@@ -451,9 +458,8 @@ def run_train(show_valid_images=False,
                 print('\r', end='', flush=True)
                 log.write(message(mode='log') + '\n')
 
-            # learning rate schduler -------------
-            # adjust_learning_rate(optimizer, schduler(iteration))
-            rate = get_learning_rate(optimizer)
+            # learning rate scheduler -------------
+            rate = scheduler.get_last_lr()[0]
 
             # one iteration update  -------------
             batch_size = len(batch['index'])
@@ -483,6 +489,7 @@ def run_train(show_valid_images=False,
                 loss = get_loss(loss_type, logit, mask)
                 loss.backward()
                 optimizer.step()
+                scheduler.step()
 
             ##############################
             # print statistics  ----------
@@ -590,7 +597,7 @@ if __name__ == '__main__':
             show_valid_images = False,
             sha               = model_sha,
             fold              = fold,
-            start_lr          = 0.0001,
+            start_lr          = 0.001,
             batch_size        = 6,
             num_iteration     = int(args.iterations),
             iter_log          = 250,

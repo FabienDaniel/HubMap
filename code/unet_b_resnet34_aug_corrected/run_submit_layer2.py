@@ -403,6 +403,7 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
     # --------------------------------------------------------------
 
     if isinstance(iterations, list):
+        iter_tag = 'custom'
         initial_checkpoint = iterations
 
     elif iterations == 'all':
