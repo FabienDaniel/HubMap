@@ -337,6 +337,7 @@ def result_bookeeping(id, tile_probability, overall_probabilities,
         tp, tn, fp, fn = np_accuracy(proba, truth)
     else:
         dice = None
+        tp, tn, fp, fn = None, None, None, None
 
     image_show_norm('overlay2',
                     overlay2,
@@ -550,9 +551,10 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
                 net.load_state_dict(state_dict, strict=True)
                 net = net.eval()
                 image_probability = get_probas(net, tile['tile_image'], flip_predict)
+                overall_probabilities.append(image_probability)
 
-                _border_cut = image_probability[128: -128, 128: -128]
-                overall_probabilities.append(_border_cut)
+                # _border_cut = image_probability[128: -128, 128: -128]
+                # overall_probabilities.append(_border_cut)
 
                 ################################################################
                 # Sauvegarde + visualisation de l'image courante
