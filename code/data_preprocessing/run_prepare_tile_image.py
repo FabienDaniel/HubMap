@@ -4,8 +4,9 @@ import numpy as np
 import os
 import imutils
 
-from code.data_preprocessing.dataset import to_tile, read_tiff, image_show_norm
-from code.hubmap_v2 import data_dir, image_show, raw_data_dir, project_repo, draw_contour_overlay
+# from code.data_preprocessing.dataset import to_tile, read_tiff, image_show_norm
+# from code.hubmap_v2 import data_dir, image_show, raw_data_dir, project_repo, draw_contour_overlay
+from code.data_preprocessing.dataset import read_tiff, to_tile
 
 import PIL
 import sys
@@ -14,9 +15,14 @@ import sys
 # tile_size  = 320
 # tile_average_step = 192
 # tile_min_score = 0.25
+from code.hubmap_v2 import get_data_path
 
+project_repo, raw_data_dir, data_dir = get_data_path('local')
 
 # --- rle ---------------------------------
+from code.lib.utility.draw import image_show
+
+
 def rle_decode(rle, height, width , fill=255):
     s = rle.split()
     start, length = [np.asarray(x, dtype=int) for x in (s[0:][::2], s[1:][::2])]
@@ -256,7 +262,7 @@ def extract_centroids_from_L2_predictions(
         # Extraction des masques issus des prédictions
         # ---------------------------------------------
 
-        file = os.path.join(base_path, f"{id}_scores.csv")
+        file = os.path.join(base_path, f"{id}.csv")
         df = pd.read_csv(file, index_col=0)
         if tile_scale < 1:
             df['x'] = tile_scale * df['x']
@@ -283,7 +289,7 @@ def extract_centroids_from_L2_predictions(
             ### On vérifie la distance / à la liste des vrais masques
             ########################################################
             distance = real_mask_centroids.apply(lambda x: ((x[0] - cX) ** 2 + (x[1] - cY) ** 2) ** 0.5, axis=1)
-            if distance.min() < 500 * tile_scale:
+            if distance.min() < 100 * tile_scale:
                 # print(f"Skips correct prediction @ {cX} {cY}")
                 continue
             else:
@@ -588,8 +594,12 @@ if __name__ == '__main__':
     #     base_path=base_path
     # )
 
-    sha = "680598dcf"
-    pred_tag = 'top3-587bbaf61-mean'
+    # sha = "680598dcf"
+    # pred_tag = 'top3-587bbaf61-mean'
+    # base_path = f"result/Layer_2/fold6_9_10/predictions_{sha}/local-{pred_tag}"
+
+    sha = "8c8658346"
+    pred_tag = 'top3-2d5650f29-mean'
     base_path = f"result/Layer_2/fold6_9_10/predictions_{sha}/local-{pred_tag}"
 
     extract_centroids_from_L2_predictions(

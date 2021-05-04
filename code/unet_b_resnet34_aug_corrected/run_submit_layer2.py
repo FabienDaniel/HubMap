@@ -499,7 +499,7 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
         # if ind != 5: continue   # test d'usage de RAM
         # if ind != 0: continue
 
-        #         if id != 'd488c759a': continue
+        if id != '26dc41664': continue
 
         #         effective_ids.append(id)
 
@@ -613,10 +613,12 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
 
             loss = np_binary_cross_entropy_loss_optimized(probability, truth)
             dice = np_dice_score_optimized(probability, truth)
-            tp, tn = np_accuracy_optimized(probability, truth)
+            # tp, tn = np_accuracy_optimized(probability, truth)
+            tp, tn, fp, fn = np_accuracy_optimized(probability, truth)
+            print(dice, tp, tn, fp, fn)
 
             _tmp = pd.DataFrame(results)
-            _tmp.columns = ['id', 'image_name', 'x', 'y', 'dice']
+            _tmp.columns = ['id', 'image_name', 'x', 'y', 'dice', 'tp', 'fn']
             _tmp.to_csv(submit_dir + f'/{id}.csv')
 
             log.write(30 * "-" + '\n')
