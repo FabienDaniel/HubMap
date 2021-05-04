@@ -476,7 +476,7 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
     ##########################################################################################
     # Define prediction parameters -----------------------------------------------------------
     ##########################################################################################
-    tile_size = 256 * 2
+    tile_size = 256 * 4
     tile_average_step = 320
     # tile_scale = 0.25
     tile_min_score = 0.25
@@ -550,7 +550,9 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
                 net.load_state_dict(state_dict, strict=True)
                 net = net.eval()
                 image_probability = get_probas(net, tile['tile_image'], flip_predict)
-                overall_probabilities.append(image_probability)
+
+                _border_cut = image_probability[128: -128, 128: -128]
+                overall_probabilities.append(_border_cut)
 
                 ################################################################
                 # Sauvegarde + visualisation de l'image courante

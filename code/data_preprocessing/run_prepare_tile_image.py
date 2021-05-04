@@ -273,14 +273,20 @@ def extract_centroids_from_L2_predictions(
 
         # print(df.head())
         # sys.exit()
+        # print(df.head())
+        #
+        #
+        # print(((df['dice'] == 0) & (df['tp'] == -1) & (df['tn'] == 1)).sum())
 
-        _tmp = df[(~(df['dice'] == 0) and (df['tp'] == -1) and (df['tn'] == 1))]
-        _tmp = _tmp[_tmp['dice'] < 0.8]
+        _tmp = df[~((df['dice'] == 0) & (df['tp'] == -1) & (df['tn'] == 1))]
+        _tmp = _tmp[_tmp['dice'] < 0.9]
 
-
+        # sys.exit()
 
         print(_tmp.shape)
         print(_tmp.head())
+
+        # sys.exit()
 
         cnts = _tmp[['x', 'y', 'dice']].values
 
@@ -602,7 +608,7 @@ if __name__ == '__main__':
     # pred_tag = 'top3-587bbaf61-mean'
     # base_path = f"result/Layer_2/fold6_9_10/predictions_{sha}/local-{pred_tag}"
 
-    sha = "8c8658346"
+    sha = "7dd3e3fcf"
     pred_tag = 'top3-2d5650f29-mean'
     base_path = f"result/Layer_2/fold6_9_10/predictions_{sha}/local-{pred_tag}"
 

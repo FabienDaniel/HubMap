@@ -260,8 +260,9 @@ def run_train(show_valid_images=False,
         f'mask_{tile_size}_{tile_scale}_centroids'
     ]
     false_positives_dir = [
-        f'predictions_18924a797_{tile_size}_{tile_scale}_centroids',
+        # f'predictions_18924a797_{tile_size}_{tile_scale}_centroids',
         f'predictions_680598dcf_top3-587bbaf61-mean_{tile_size}_{tile_scale}_centroids',
+        f'predictions_7dd3e3fcf_top3-2d5650f29-mean_{tile_size}_{tile_scale}_centroids',
     ]
     train_set, val_set = split_dataset(
         sha                 = sha,
