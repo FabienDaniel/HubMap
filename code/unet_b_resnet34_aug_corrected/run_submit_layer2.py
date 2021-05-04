@@ -501,7 +501,7 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
         # if ind != 5: continue   # test d'usage de RAM
         # if ind != 0: continue
 
-        if id != '26dc41664': continue
+        # if id != '26dc41664': continue
 
         #         effective_ids.append(id)
 
