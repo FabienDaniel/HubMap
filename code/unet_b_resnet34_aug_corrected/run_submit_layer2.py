@@ -17,7 +17,7 @@ from rasterio.windows import Window
 from torch.nn.parallel.data_parallel import data_parallel
 from datetime import datetime
 
-SERVER_RUN = 'kaggle'
+SERVER_RUN = 'local'
 DEBUG = False
 
 if SERVER_RUN == 'local':
@@ -629,15 +629,15 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
 
         elif server == 'kaggle':
             print('starts predict mask creation')
-            print(width, height)
+            # print(width, height)
 
             scaled_width = probability.shape[1]
             scaled_height = probability.shape[0]
             full_size[id] = (width, height, scaled_width, scaled_height)
 
-            print(type(probability))
-            print(probability.shape)
-            print(probability[:5])
+            # print(type(probability))
+            # print(probability.shape)
+            # print(probability[:5])
 
             #  predict = (probability > 0.5).astype(np.uint8)
             predict = (probability > 0.5).astype(bool)
@@ -674,7 +674,7 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
 ########################################################################
 if __name__ == '__main__':
 
-    DEBUG = True
+    DEBUG = False
 
     if SERVER_RUN == 'local':
         # Initialize parser
