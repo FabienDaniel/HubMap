@@ -637,17 +637,14 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
 
         elif server == 'kaggle':
             print('starts predict mask creation')
-            # print(width, height)
 
-            scaled_width = probability.shape[1]
-            scaled_height = probability.shape[0]
-            full_size[id] = (width, height, scaled_width, scaled_height)
+            if SERVER_RUN == 'kaggle':
+                scaled_width = probability.shape[1]
+                scaled_height = probability.shape[0]
+                full_size[id] = (width, height, scaled_width, scaled_height)
+            else:
+                probability = cv2.resize(probability, dsize=(width, height), interpolation=cv2.INTER_LINEAR)
 
-            # print(type(probability))
-            # print(probability.shape)
-            # print(probability[:5])
-
-            #  predict = (probability > 0.5).astype(np.uint8)
             predict = (probability > 0.5).astype(bool)
 
             print("predict array created")
