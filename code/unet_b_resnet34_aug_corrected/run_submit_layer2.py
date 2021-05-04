@@ -18,7 +18,7 @@ from torch.nn.parallel.data_parallel import data_parallel
 from datetime import datetime
 
 SERVER_RUN = 'local'
-DEBUG = False
+DEBUG = True
 
 if SERVER_RUN == 'local':
 
@@ -28,7 +28,7 @@ if SERVER_RUN == 'local':
     from code.lib.include import IDENTIFIER
     from code.lib.utility.file import Logger, time_to_str
     from code.unet_b_resnet34_aug_corrected.model import Net, \
-        np_binary_cross_entropy_loss_optimized, np_dice_score_optimized, np_accuracy_optimized
+    np_binary_cross_entropy_loss_optimized, np_dice_score_optimized, np_accuracy_optimized, np_accuracy
 
 elif SERVER_RUN == 'kaggle':
     IDENTIFIER = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
@@ -334,6 +334,7 @@ def result_bookeeping(id, tile_probability, overall_probabilities,
 
     if server == 'local':
         dice = np_dice_score_optimized(proba, truth)
+        tp, tn, fp, fn = np_accuracy(proba, truth)
     else:
         dice = None
 
@@ -345,7 +346,8 @@ def result_bookeeping(id, tile_probability, overall_probabilities,
     # df = pd.DataFrame(tile_scores, columns=['tile', 'image', 'x', 'y', 'dice'])
     # df.to_csv(submit_dir + f'/{id}_scores.csv')
 
-    return f'y{y0}_x{x0}.png', x0, y0, dice
+    # print(f'y{y0}_x{x0}.png', x0, y0, dice, tp, tn, fp, fn)
+    return f'y{y0}_x{x0}.png', x0, y0, dice, tp, tn, fp, fn
 
 
 def rle_encode_batched(img):
@@ -556,7 +558,7 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
                 last_iter = _num == len(initial_checkpoint) - 1
 
                 if SERVER_RUN == 'local':
-                    image_name, x0, y0, dice = result_bookeeping(
+                    image_name, x0, y0, dice, tp, tn, fp, fn = result_bookeeping(
                         id,
                         image_probability,
                         overall_probabilities,
@@ -568,7 +570,7 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
                         save_to_disk=last_iter
                     )
                     if last_iter:
-                        results.append([id, image_name, x0, y0, dice])
+                        results.append([id, image_name, x0, y0, dice, tp, tn, fp, fn])
 
             _probas = np.mean(overall_probabilities, axis=0)
             tile_probability.append(_probas.astype(np.float32))
@@ -613,12 +615,12 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
 
             loss = np_binary_cross_entropy_loss_optimized(probability, truth)
             dice = np_dice_score_optimized(probability, truth)
-            # tp, tn = np_accuracy_optimized(probability, truth)
-            tp, tn, fp, fn = np_accuracy_optimized(probability, truth)
-            print(dice, tp, tn, fp, fn)
+            tp, tn = np_accuracy_optimized(probability, truth)
+            # tp, tn, fp, fn = np_accuracy(probability, truth)
+            # print(dice, tp, tn)
 
             _tmp = pd.DataFrame(results)
-            _tmp.columns = ['id', 'image_name', 'x', 'y', 'dice', 'tp', 'fn']
+            _tmp.columns = ['id', 'image_name', 'x', 'y', 'dice', 'tp', 'tn', 'fp', 'fn']
             _tmp.to_csv(submit_dir + f'/{id}.csv')
 
             log.write(30 * "-" + '\n')
@@ -720,24 +722,24 @@ if __name__ == '__main__':
         repo = git.Repo(search_parent_directories=True)
         model_sha = repo.head.object.hexsha[:9]
         print(f"current commit: {model_sha}")
-
-        changedFiles = [item.a_path for item in repo.index.diff(None) if item.a_path.endswith(".py")]
-        if len(changedFiles) > 0:
-            print("ABORT submission -- There are unstaged files:")
-            for _file in changedFiles:
-                print(f" * {_file}")
-
-        else:
-            submit(model_sha,
-                   server=args.Server,
-                   iterations=args.Iterations,
-                   fold=fold,
-                   scale=0.5,
-                   flip_predict=args.flip,
-                   checkpoint_sha=args.CheckpointSha,
-                   layer1=args.layer1,
-                   backbone='efficientnet-b0',
-                   )
+        #
+        # changedFiles = [item.a_path for item in repo.index.diff(None) if item.a_path.endswith(".py")]
+        # if len(changedFiles) > 0:
+        #     print("ABORT submission -- There are unstaged files:")
+        #     for _file in changedFiles:
+        #         print(f" * {_file}")
+        #
+        # else:
+        submit(model_sha,
+               server=args.Server,
+               iterations=args.Iterations,
+               fold=fold,
+               scale=0.5,
+               flip_predict=args.flip,
+               checkpoint_sha=args.CheckpointSha,
+               layer1=args.layer1,
+               backbone='efficientnet-b0',
+               )
 
     elif SERVER_RUN == 'kaggle':
         #         pass

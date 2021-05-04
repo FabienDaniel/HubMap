@@ -274,7 +274,11 @@ def extract_centroids_from_L2_predictions(
         # print(df.head())
         # sys.exit()
 
-        _tmp = df[df['dice'] < 0.8]
+        _tmp = df[(~(df['dice'] == 0) and (df['tp'] == -1) and (df['tn'] == 1))]
+        _tmp = _tmp[_tmp['dice'] < 0.8]
+
+
+
         print(_tmp.shape)
         print(_tmp.head())
 
