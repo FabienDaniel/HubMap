@@ -66,7 +66,7 @@ def np_dice_score(probability, mask):
     return dice
 
 
-def np_accuracy(probability, mask):
+def np_accuracy(probability, mask,all_metrics=True):
     p = probability.reshape(-1)
     t = mask.reshape(-1)
     p = p > 0.5
@@ -79,8 +79,12 @@ def np_accuracy(probability, mask):
         tp = -1
         fn = -1
 
-    tn = ((1 - p) * (1 - t)).sum() / (1 - t).sum()
-    fp = ((1-t) * p).sum() / (1-t).sum()
+    if all_metrics:
+        tn = ((1 - p) * (1 - t)).sum() / (1 - t).sum()
+        fp = ((1-t) * p).sum() / (1-t).sum()
+    else:
+        tn = -1
+        fp = -1
 
     return tp, tn, fp, fn
 

@@ -92,7 +92,7 @@ def do_valid(net, valid_loader):
     dice = np_dice_score(probability, mask)
 
     # print('3', timer() - start_timer)
-    tp, tn, fp, fn = np_accuracy(probability, mask)
+    tp, tn, _, _ = np_accuracy(probability, mask, all_metrics=False)
     return [dice, loss, tp, tn]
 
 
