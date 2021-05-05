@@ -519,7 +519,7 @@ def run_make_train_tile(tile_scale,
         cv2.imwrite(raw_data_dir + '/train/%s.mask.png' % id , mask)
 
         #make tile
-        tile = to_tile(image, mask, scale=tile_scale, size=tile_size)
+        tile = to_tile(image, mask, scale=tile_scale, size=tile_size, step=tile_size)
 
         coord = np.array(tile['coord'])
         df_image = pd.DataFrame()
@@ -539,6 +539,9 @@ def run_make_train_tile(tile_scale,
 
             tile_image = tile['tile_image'][t]
             tile_mask  = tile['tile_mask'][t]
+
+            if tile_mask.sum() / tile_size ** 2 > 0.1: continue
+
             cv2.imwrite(train_tile_dir + '/%s/%s.png' % (id, s), tile_image)
             cv2.imwrite(train_tile_dir + '/%s/%s.mask.png' % (id, s), tile_mask)
 
@@ -579,17 +582,19 @@ if __name__ == '__main__':
     tile_scale = 0.5
     tile_size = 700
 
-    # run_make_train_tile(
-    #     tile_scale=tile_scale,
-    #     tile_size=tile_size,
-    #     train_tile_dir = project_repo + f'/data/tile/{tile_scale}_{tile_size}_train'
-    # )
+    run_make_train_tile(
+        tile_scale=tile_scale,
+        tile_size=tile_size,
+        train_tile_dir = project_repo + f'/data/tile/{tile_scale}_{tile_size}_train'
+    )
 
     # extract_mask_centroids(
     #     tile_scale=tile_scale,
     #     tile_size=tile_size,
     #     train_tile_dir=project_repo + f'/data/tile/mask_{tile_size}_{tile_scale}_centroids'
     # )
+
+    ##############################################################################################################
 
     # sha = "18924a797"   #  "4707bcbcf"
     # pred_tag = 'local-all-mean'
@@ -604,19 +609,21 @@ if __name__ == '__main__':
     #     base_path=base_path
     # )
 
+
+    ##############################################################################################################
     # sha = "680598dcf"
     # pred_tag = 'top3-587bbaf61-mean'
     # base_path = f"result/Layer_2/fold6_9_10/predictions_{sha}/local-{pred_tag}"
 
-    sha = "7dd3e3fcf"
-    pred_tag = 'top3-2d5650f29-mean'
-    base_path = f"result/Layer_2/fold6_9_10/predictions_{sha}/local-{pred_tag}"
-
-    extract_centroids_from_L2_predictions(
-        tile_scale=tile_scale,
-        image_size=tile_size,
-        train_tile_dir=project_repo + f'/data/tile/predictions_{sha}_{pred_tag}_{tile_size}_{tile_scale}_centroids',
-        sha=sha,
-        pred_tag=pred_tag,
-        base_path=base_path
-    )
+    # sha = "7dd3e3fcf"
+    # pred_tag = 'top3-2d5650f29-mean'
+    # base_path = f"result/Layer_2/fold6_9_10/predictions_{sha}/local-{pred_tag}"
+    #
+    # extract_centroids_from_L2_predictions(
+    #     tile_scale=tile_scale,
+    #     image_size=tile_size,
+    #     train_tile_dir=project_repo + f'/data/tile/predictions_{sha}_{pred_tag}_{tile_size}_{tile_scale}_centroids',
+    #     sha=sha,
+    #     pred_tag=pred_tag,
+    #     base_path=base_path
+    # )

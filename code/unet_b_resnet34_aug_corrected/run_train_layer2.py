@@ -131,6 +131,8 @@ def split_dataset(sha, train_image_id, true_positives_dir, false_positives_dir):
     false_positives = {k: 0 for k in train_image_id.values()}
     train_set = {k: [] for k in train_image_id.values()}
     val_set = {k: [] for k in train_image_id.values()}
+    total_set = {k: [] for k in train_image_id.values()}
+    tag = {k: [] for k in train_image_id.values()}
 
     project_repo, raw_data_dir, data_dir = get_data_path('local')
 
@@ -147,15 +149,77 @@ def split_dataset(sha, train_image_id, true_positives_dir, false_positives_dir):
                 for f in os.listdir(data_dir + image_dir)
                 if 'mask' in f
             ]
+            # print(len(current_images))
+
             if i == 0:
                 true_positives[id] += len(current_images)
             else:
                 false_positives[id] += len(current_images)
 
             images[id] += len(current_images)
-            val_size = int(len(current_images) * 0.2)
-            val_set[id] += random.sample(current_images, val_size)
-            train_set[id] += [c for c in current_images if c not in val_set[id]]
+            total_set[id] += current_images
+            if i == 0:
+                tag[id] += [1 for c in range(len(current_images))]  # TP
+            else:
+                tag[id] += [0 for c in range(len(current_images))]  # TN
+
+        _tmp = [c.split('/')[-1].split('_') for c in total_set[id]]
+        coords = [(int(c[0].strip('y')), int(c[1].strip('x'))) for c in _tmp]
+        coords = np.array(coords)
+        tags = np.array(tag[id])
+        nb = len(coords)
+        xmin, xmax = coords[:, 1].min(), coords[:, 1].max()
+        ymin, ymax = coords[:, 0].min(), coords[:, 0].max()
+        print(id, 'min/max y:', coords[:, 0].min(), coords[:, 0].max())
+        print(id, 'min/max x:', coords[:, 1].min(), coords[:, 1].max())
+
+        ratio = 20
+        epsilon = 0.3
+        increment = 0
+        valid_set_found = False
+        while True:
+            increment += 1
+            if increment > 5000:
+                print("could not meet CV criterium")
+                sys.exit()
+            x, y = np.random.random(), np.random.random()
+            x0 = int(xmin + (xmax-xmin) * x)
+            y0 = int(ymin + (ymax-ymin) * y)
+            # print(i, int(xmin + (xmax-xmin) * x), int(ymin + (ymax-ymin) * y))
+
+            _index = [0 for _ in range(4)]
+            _index[0] = (coords[:, 0] > y0) & (coords[:, 1] > x0)
+            _index[1] = (coords[:, 0] > y0) & (coords[:, 1] < x0)
+            _index[2] = (coords[:, 0] < y0) & (coords[:, 1] > x0)
+            _index[3] = (coords[:, 0] < y0) & (coords[:, 1] < x0)
+
+            a = coords[_index[0]]
+            b = coords[_index[1]]
+            c = coords[_index[2]]
+            d = coords[_index[3]]
+
+            n = [0 for _ in range(4)]
+            n[0] = tags[_index[0]].sum()
+            n[1] = tags[_index[1]].sum()
+            n[2] = tags[_index[2]].sum()
+            n[3] = tags[_index[3]].sum()
+
+            for quadrant, _tmp in enumerate([a, b, c, d]):
+                # print(_tmp.shape[0] / nb * 100, ratio - epsilon)
+                if ratio - epsilon < _tmp.shape[0] / nb * 100 < ratio + epsilon \
+                        and 0.1 * true_positives[id] < n[quadrant] < 0.3 * true_positives[id]:
+                    # print(_tmp.shape[0] / nb * 100)
+                    print(f'limits: (y={y0},x={x0}, quadrant={quadrant}): nb={_tmp.shape[0]} / {nb}, TP = {n[quadrant]}')
+                    valid_set_found = True
+                    break
+            if valid_set_found: break
+
+        val_set[id] = np.array(total_set[id])[_index[quadrant]].tolist()
+        train_set[id] = np.array(total_set[id])[~_index[quadrant]].tolist()
+        print(f'val nb={len(val_set[id])},  '
+              f'trn nb={len(train_set[id])}')
+
+        # sys.exit()
 
         print(f"{id}: train/val = {len(train_set[id])} / {len(val_set[id])}")
 
@@ -260,9 +324,7 @@ def run_train(show_valid_images=False,
         f'mask_{tile_size}_{tile_scale}_centroids'
     ]
     false_positives_dir = [
-        # f'predictions_18924a797_{tile_size}_{tile_scale}_centroids',
-        f'predictions_680598dcf_top3-587bbaf61-mean_{tile_size}_{tile_scale}_centroids',
-        f'predictions_7dd3e3fcf_top3-2d5650f29-mean_{tile_size}_{tile_scale}_centroids',
+        f"TN_{tile_scale}_{tile_size}_train"
     ]
     train_set, val_set = split_dataset(
         sha                 = sha,
