@@ -74,16 +74,18 @@ def np_accuracy(probability, mask,all_metrics=True):
 
     if t.sum() != 0:
         tp = (p * t).sum() / t.sum()
-        fn = (t * (1-p)).sum() / t.sum()
+        if all_metrics:
+            fn = (t * (1-p)).sum() / t.sum()
+        else:
+            fn = -1
     else:
         tp = -1
         fn = -1
 
+    tn = ((1 - p) * (1 - t)).sum() / (1 - t).sum()
     if all_metrics:
-        tn = ((1 - p) * (1 - t)).sum() / (1 - t).sum()
         fp = ((1-t) * p).sum() / (1-t).sum()
     else:
-        tn = -1
         fp = -1
 
     return tp, tn, fp, fn
