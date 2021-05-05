@@ -670,6 +670,6 @@ if __name__ == '__main__':
             tile_scale        = 0.5,
             tile_size         = 700,
             image_size        = 512,
-            backbone          = 'efficientnet-b0',
+            backbone          = 'efficientnet-b1',
         )
 
