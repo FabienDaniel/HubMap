@@ -739,7 +739,7 @@ if __name__ == '__main__':
                flip_predict=args.flip,
                checkpoint_sha=args.CheckpointSha,
                layer1=args.layer1,
-               backbone='efficientnet-b0',
+               backbone='resnet34',
                )
 
     elif SERVER_RUN == 'kaggle':
@@ -758,6 +758,6 @@ if __name__ == '__main__':
                flip_predict=True,
                checkpoint_sha=None,
                layer1='../input/hubmap-layer1/',
-               backbone='efficientnet-b0',
+               backbone='resnet34',
                )
 

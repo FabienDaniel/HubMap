@@ -273,7 +273,7 @@ class Net(nn.Module):
         if backbone == 'custom-resnet34':
             self.cnn_model = CustomResnet34()
 
-        elif backbone in ['resnet34', 'efficientnet-b0', 'efficientnet-b1']:
+        elif backbone in ['resnet34', 'efficientnet-b0', 'efficientnet-b1', 'densenet121']:
             if pretrained:
                 self.cnn_model = Unet(
                     encoder_name    = backbone,  # choose encoder, e.g. mobilenet_v2 or efficientnet-b7
