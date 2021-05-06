@@ -477,7 +477,7 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
     ##########################################################################################
     # Define prediction parameters -----------------------------------------------------------
     ##########################################################################################
-    tile_size = 256 * 4
+    tile_size = 256 * 5
     tile_average_step = 320
     # tile_scale = 0.25
     tile_min_score = 0.25
@@ -513,11 +513,8 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
         # Define tiles
         ###############
 
-        try:
-            tiles = TileGenerator(image_id=id, raw_data_dir=raw_data_dir, size=tile_size,
-                                  scale=scale, layer1_path=layer1, server=server)
-        except:
-            sys.exit()
+        tiles = TileGenerator(image_id=id, raw_data_dir=raw_data_dir, size=tile_size,
+                              scale=scale, layer1_path=layer1, server=server)
 
         print(30 * '-')
         height = tiles.height
@@ -551,10 +548,13 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
                 net.load_state_dict(state_dict, strict=True)
                 net = net.eval()
                 image_probability = get_probas(net, tile['tile_image'], flip_predict)
-                overall_probabilities.append(image_probability)
 
-                # _border_cut = image_probability[128: -128, 128: -128]
-                # overall_probabilities.append(_border_cut)
+                _cut = 256
+
+                _border_cut = image_probability[_cut: -_cut, _cut: -_cut]
+                effective_tile_size = _border_cut.shape[0]
+
+                overall_probabilities.append(_border_cut)
 
                 ################################################################
                 # Sauvegarde + visualisation de l'image courante
@@ -562,12 +562,20 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
                 last_iter = _num == len(initial_checkpoint) - 1
 
                 if SERVER_RUN == 'local':
+
+                    if server == 'local':
+                        _mask = tile['tile_mask'][_cut: -_cut, _cut: -_cut]
+                    else:
+                        _mask = None
+
+                    _image = tile['tile_image'][:, _cut: -_cut, _cut: -_cut]
+
                     image_name, x0, y0, dice, tp, tn, fp, fn = result_bookeeping(
                         id,
-                        image_probability,
+                        _border_cut,
                         overall_probabilities,
-                        tile['tile_mask'],
-                        tile['tile_image'],
+                        _mask,
+                        _image,
                         tile['centroids'],
                         server,
                         submit_dir,
@@ -595,7 +603,7 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
                               int(scale * height),
                               int(scale * width),
                               scale,
-                              tile_size,
+                              effective_tile_size,
                               tile_average_step,
                               tile_min_score,
                               aggregate='mean')
@@ -739,7 +747,7 @@ if __name__ == '__main__':
                flip_predict=args.flip,
                checkpoint_sha=args.CheckpointSha,
                layer1=args.layer1,
-               backbone='resnet34',
+               backbone='efficientnet-b0',
                )
 
     elif SERVER_RUN == 'kaggle':
@@ -758,6 +766,6 @@ if __name__ == '__main__':
                flip_predict=True,
                checkpoint_sha=None,
                layer1='../input/hubmap-layer1/',
-               backbone='resnet34',
+               backbone='densenet121',
                )
 
