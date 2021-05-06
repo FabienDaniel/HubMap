@@ -549,7 +549,7 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
                 net = net.eval()
                 image_probability = get_probas(net, tile['tile_image'], flip_predict)
 
-                _cut = 256
+                _cut = 0
 
                 _border_cut = image_probability[_cut: -_cut, _cut: -_cut]
                 effective_tile_size = _border_cut.shape[0]

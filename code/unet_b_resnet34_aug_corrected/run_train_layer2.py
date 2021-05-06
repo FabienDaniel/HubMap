@@ -142,8 +142,14 @@ def split_dataset(sha, train_image_id, true_positives_dir, false_positives_dir):
 
     for id in train_image_id.values():
 
+        print(30*'-')
+        print(f"Spliting data for {id}")
+
         for i, _dataset in enumerate(true_positives_dir + false_positives_dir):
             image_dir = f"/tile/{_dataset}/{id}/"
+
+            if not Path.exists(Path(data_dir + image_dir)): continue
+
             current_images = [
                 image_dir + f.strip('.mask.png')
                 for f in os.listdir(data_dir + image_dir)
@@ -151,21 +157,25 @@ def split_dataset(sha, train_image_id, true_positives_dir, false_positives_dir):
             ]
             # print(len(current_images))
 
-            if i == 0:
+            if i == 0 or i == 1:
                 true_positives[id] += len(current_images)
             else:
                 false_positives[id] += len(current_images)
 
             images[id] += len(current_images)
             total_set[id] += current_images
-            if i == 0:
+            if i == 0 or i == 1:
                 tag[id] += [1 for c in range(len(current_images))]  # TP
             else:
                 tag[id] += [0 for c in range(len(current_images))]  # TN
 
+        print('True positives:', true_positives[id])
+        print('False positives:', false_positives[id])
+
         _tmp = [c.split('/')[-1].split('_') for c in total_set[id]]
         coords = [(int(c[0].strip('y')), int(c[1].strip('x'))) for c in _tmp]
         coords = np.array(coords)
+
         tags = np.array(tag[id])
         nb = len(coords)
         xmin, xmax = coords[:, 1].min(), coords[:, 1].max()
@@ -177,11 +187,12 @@ def split_dataset(sha, train_image_id, true_positives_dir, false_positives_dir):
         epsilon = 0.3
         increment = 0
         valid_set_found = False
+        closest_ratio = -1
         while True:
             increment += 1
             if increment > 5000:
-                print("could not meet CV criterium")
-                sys.exit()
+                print("stopped --- could not meet CV criterium")
+                break
             x, y = np.random.random(), np.random.random()
             x0 = int(xmin + (xmax-xmin) * x)
             y0 = int(ymin + (ymax-ymin) * y)
@@ -212,10 +223,26 @@ def split_dataset(sha, train_image_id, true_positives_dir, false_positives_dir):
                     print(f'limits: (y={y0},x={x0}, quadrant={quadrant}): nb={_tmp.shape[0]} / {nb}, TP = {n[quadrant]}')
                     valid_set_found = True
                     break
+                else:
+                    current_ratio = _tmp.shape[0]
+                    if abs(current_ratio - ratio) < abs(closest_ratio - ratio):
+                        closest_ratio = current_ratio
+                        x_best = x0
+                        y_best = y0
+                        best_index = _index[quadrant]
+                        best_tp = n[quadrant]
+                        best_quadrant = quadrant
+
             if valid_set_found: break
 
-        val_set[id] = np.array(total_set[id])[_index[quadrant]].tolist()
-        train_set[id] = np.array(total_set[id])[~_index[quadrant]].tolist()
+        if valid_set_found:
+            val_set[id] = np.array(total_set[id])[_index[quadrant]].tolist()
+            train_set[id] = np.array(total_set[id])[~_index[quadrant]].tolist()
+        else:
+            print(f'limits: (y={y0},x={x0}, quadrant={best_quadrant}): nb={current_ratio} / {nb}, TP = {best_tp}')
+            val_set[id] = np.array(total_set[id])[best_index].tolist()
+            train_set[id] = np.array(total_set[id])[~best_index].tolist()
+
         print(f'val nb={len(val_set[id])},  '
               f'trn nb={len(train_set[id])}')
 
@@ -223,8 +250,9 @@ def split_dataset(sha, train_image_id, true_positives_dir, false_positives_dir):
 
         print(f"{id}: train/val = {len(train_set[id])} / {len(val_set[id])}")
 
-    print('\n True positives:', true_positives)
-    print('\n False positives:', false_positives)
+    print('\nTrue positives:', true_positives)
+    print('False positives:', false_positives)
+
 
     for image_id, images in val_set.items():
         outdir = data_dir + f"/tile/val_aug_{sha}/"
@@ -268,6 +296,7 @@ def run_train(show_valid_images=False,
               image_size=320,      # overall size of the input images
               tile_scale=1,
               backbone='resnet34',
+              include_test=False,
               *args,
               **kwargs
               ):
@@ -320,15 +349,33 @@ def run_train(show_valid_images=False,
         13: 'cb2d976f4',
         14: 'e79de561c',
     }
+
+    test_image_id = {
+        15: '2ec3f1bb9',
+        16: '3589adb90',
+        17: '57512b7f1',
+        18: 'aa05346ff',
+        19: 'd488c759a',
+    }
+
+    if include_test:
+        image_ids = {**train_image_id, **test_image_id}
+    else:
+        image_ids = train_image_id
+
+
+
     true_positives_dir = [
-        f'mask_{tile_size}_{tile_scale}_centroids'
+        f'mask_{tile_size}_{tile_scale}_centroids',
+        f"TP_{tile_scale}_{tile_size}_pseudolabels_f765ca3ec",
     ]
     false_positives_dir = [
-        f"TN_{tile_scale}_{tile_size}_train"
+        f"TN_{tile_scale}_{tile_size}_train",
+        f"TN_{tile_scale}_{tile_size}_pseudolabels_f765ca3ec",
     ]
     train_set, val_set = split_dataset(
         sha                 = sha,
-        train_image_id      = train_image_id,
+        train_image_id      = image_ids,
         true_positives_dir  = true_positives_dir,
         false_positives_dir = false_positives_dir
     )
@@ -670,6 +717,7 @@ if __name__ == '__main__':
             tile_scale        = 0.5,
             tile_size         = 700,
             image_size        = 512,
-            backbone          = 'densenet121',
+            backbone          = 'efficientnet-b0',
+            include_test      = True
         )
 

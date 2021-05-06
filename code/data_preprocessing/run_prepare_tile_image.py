@@ -555,6 +555,70 @@ def run_make_train_tile(tile_scale,
         #------
 
 
+def run_make_pseudo_labels(tile_scale,
+                           tile_size,
+                           train_tile_dir,
+                           model_predictions
+                           ):
+
+    df_train = pd.read_csv(model_predictions)
+
+    os.makedirs(train_tile_dir, exist_ok=True)
+    for i in range(0, len(df_train)):
+        id, encoding = df_train.iloc[i]
+
+        # if id != 'e79de561c': continue
+
+        print(50*'-')
+        print(f"processing image: {id}")
+
+        image_file = raw_data_dir + '/test/%s.tiff' % id
+        image = read_tiff(image_file)
+
+        height, width = image.shape[:2]
+        print(f"image size: {height} x {width}")
+
+        mask = rle_decode(encoding, height, width, 255)
+        # cv2.imwrite(raw_data_dir + '/train/%s.mask.png' % id , mask)
+
+        #make tile
+        tile = to_tile(image, mask, scale=tile_scale, size=tile_size, step=tile_size)
+
+        coord = np.array(tile['coord'])
+        df_image = pd.DataFrame()
+        df_image['cx'] = coord[:, 0].astype(np.int32)
+        df_image['cy'] = coord[:, 1].astype(np.int32)
+        df_image['cv'] = coord[:, 2]
+
+        # --- save ---
+        os.makedirs(train_tile_dir+'/%s' % id, exist_ok=True)
+
+        tile_id = []
+        num = len(tile['tile_image'])
+        for t in range(num):
+            cx, cy, cv   = tile['coord'][t]
+            s = 'y%08d_x%08d' % (cy, cx)
+            tile_id.append(s)
+
+            tile_image = tile['tile_image'][t]
+            tile_mask  = tile['tile_mask'][t]
+
+            # if tile_mask.sum() / tile_size ** 2 > 0.1: continue
+
+            cv2.imwrite(train_tile_dir + '/%s/%s.png' % (id, s), tile_image)
+            cv2.imwrite(train_tile_dir + '/%s/%s.mask.png' % (id, s), tile_mask)
+
+            image_show('tile_image', tile_image)
+            image_show('tile_mask', tile_mask)
+            cv2.waitKey(1)
+
+
+        df_image['tile_id'] = tile_id
+        df_image[['tile_id', 'cx', 'cy', 'cv']].to_csv(train_tile_dir+'/%s.csv' % id, index=False)
+        #------
+
+
+
 #############################
 # make tile train image
 #############################
@@ -582,11 +646,25 @@ if __name__ == '__main__':
     tile_scale = 0.5
     tile_size = 700
 
-    run_make_train_tile(
-        tile_scale=tile_scale,
-        tile_size=tile_size,
-        train_tile_dir = project_repo + f'/data/tile/{tile_scale}_{tile_size}_train'
+    ##############################################################################################################
+
+    # run_make_train_tile(
+    #     tile_scale=tile_scale,
+    #     tile_size=tile_size,
+    #     train_tile_dir = project_repo + f'/data/tile/{tile_scale}_{tile_size}_train'
+    # )
+
+    ##############################################################################################################
+
+    run_make_pseudo_labels(
+        tile_scale,
+        tile_size,
+        train_tile_dir = project_repo + f'/data/tile/{tile_scale}_{tile_size}_pseudolabels',
+        model_predictions = f'result/Layer_2/fold6_9_10/predictions_b07fafd31/'
+                            f'kaggle-top3-f765ca3ec-mean/submission_b07fafd31-fold6_9_10-f765ca3ec-top3.csv'
     )
+
+    ##############################################################################################################
 
     # extract_mask_centroids(
     #     tile_scale=tile_scale,
