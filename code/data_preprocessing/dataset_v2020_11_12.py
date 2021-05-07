@@ -645,7 +645,7 @@ if __name__ == '__main__':
         print("mode missing")
         sys.exit()
     elif args.mode == 'augmentation':
-        seed = 37
+        seed = 3
         seed_py(seed)
         seed_torch(seed)
         run_check_augment()
