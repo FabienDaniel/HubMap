@@ -254,33 +254,33 @@ def split_dataset(sha, train_image_id, true_positives_dir, false_positives_dir):
     print('False positives:', false_positives)
 
 
-    for image_id, images in val_set.items():
-        outdir = data_dir + f"/tile/val_aug_{sha}/"
-        Path(outdir + f'/{image_id}').mkdir(parents=True, exist_ok=True)
-        additional_data = []
-        for image_path in images:
-            # print(data_dir + image_path)
-            image = cv2.imread(data_dir + f'{image_path}.png', cv2.IMREAD_COLOR)
-            mask  = cv2.imread(data_dir + f'{image_path}.mask.png', cv2.IMREAD_GRAYSCALE)
-            result = val_albu_augment({
-                'image_size': image_size,
-                'image': image.copy(),
-                'mask': mask.copy(),
-                'verbose': False
-            })
-
-            # image_show_norm('overlay1', result['image'])
-            # cv2.waitKey(1)
-
-            _image = f"/tile/val_aug_{sha}/{image_id}/{image_path.split('/')[-1]}"
-            aug_data_path = data_dir + _image
-            cv2.imwrite(f"{aug_data_path}.png", result['image'])
-            cv2.imwrite(f"{aug_data_path}.mask.png", result["mask"])
-            additional_data.append(_image)
-
-        val_set[image_id].extend(additional_data)
-            # print(aug_data_path)
-        # sys.exit()
+    # for image_id, images in val_set.items():
+    #     outdir = data_dir + f"/tile/val_aug_{sha}/"
+    #     Path(outdir + f'/{image_id}').mkdir(parents=True, exist_ok=True)
+    #     additional_data = []
+    #     for image_path in images:
+    #         # print(data_dir + image_path)
+    #         image = cv2.imread(data_dir + f'{image_path}.png', cv2.IMREAD_COLOR)
+    #         mask  = cv2.imread(data_dir + f'{image_path}.mask.png', cv2.IMREAD_GRAYSCALE)
+    #         result = val_albu_augment({
+    #             'image_size': image_size,
+    #             'image': image.copy(),
+    #             'mask': mask.copy(),
+    #             'verbose': False
+    #         })
+    #
+    #         # image_show_norm('overlay1', result['image'])
+    #         # cv2.waitKey(1)
+    #
+    #         _image = f"/tile/val_aug_{sha}/{image_id}/{image_path.split('/')[-1]}"
+    #         aug_data_path = data_dir + _image
+    #         cv2.imwrite(f"{aug_data_path}.png", result['image'])
+    #         cv2.imwrite(f"{aug_data_path}.mask.png", result["mask"])
+    #         additional_data.append(_image)
+    #
+    #     val_set[image_id].extend(additional_data)
+    #         # print(aug_data_path)
+    #     # sys.exit()
 
     return train_set, val_set
 
@@ -707,7 +707,7 @@ if __name__ == '__main__':
             show_valid_images = False,
             sha               = model_sha,
             fold              = fold,
-            start_lr          = 0.001,
+            start_lr          = 0.002,
             batch_size        = 6,
             num_iteration     = int(args.iterations),
             iter_log          = 250,
