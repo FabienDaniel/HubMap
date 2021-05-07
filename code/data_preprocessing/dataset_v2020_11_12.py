@@ -410,15 +410,15 @@ def train_albu_augment_layer2(record):
                                           brightness_by_max = True,
                                           always_apply = False,
                                           p = 1),
-            albu.RandomBrightnessContrast(brightness_limit=(-0.2, 0.6),
+            albu.RandomBrightnessContrast(brightness_limit=(-0.1, 0.3),
                                           contrast_limit=.2,
                                           brightness_by_max=True,
                                           always_apply=False,
                                           p= 1),
-            albu.augmentations.transforms.ColorJitter(brightness=0.2,
-                                                      contrast=0.2,
-                                                      saturation=0.1,
-                                                      hue=0.1,
+            albu.augmentations.transforms.ColorJitter(brightness=0.05,
+                                                      contrast=0.05,
+                                                      saturation=0.05,
+                                                      hue=0.05,
                                                       always_apply=False,
                                                       p=1),
             albu.RandomGamma(p=1)
@@ -428,9 +428,9 @@ def train_albu_augment_layer2(record):
         #     albu.IAAAffine(p=.5),
         # ], p=.25),
         albu.OneOf([
-            albu.augmentations.transforms.Blur(blur_limit=15, always_apply=False, p=0.25),
-            albu.augmentations.transforms.Blur(blur_limit=3, always_apply=False, p=0.5)
-        ], p=0.5),
+            albu.augmentations.transforms.Blur(blur_limit=5, always_apply=False, p=0.1),
+            albu.augmentations.transforms.Blur(blur_limit=3, always_apply=False, p=0.1)
+        ], p=0.2),
         albu.RandomGamma(gamma_limit=(10, 130), p=0.1),
         albu.RandomRotate90(p=.5),
         albu.HorizontalFlip(p=.5),
@@ -599,11 +599,11 @@ def augment(image, mask):
 
 def run_check_augment():
 
-    image_size = 256
+    image_size = 512
     print("initialize dataset")
     dataset = HuDataset(
         image_id  = [make_image_id('train', [0])],
-        image_dir = ['0.25_320_train'],
+        image_dir = ['mask_700_0.5_centroids'],
     )
 
     for i in range(1000):
@@ -615,9 +615,9 @@ def run_check_augment():
         image_show_norm('overlay', image)
         cv2.waitKey(1)
 
-        for i in range(100):
+        for i in range(20):
             print(70 * '*')
-            result = train_albu_augment_layer1({
+            result = train_albu_augment_layer2({
                 'image_size': image_size,
                 'image': image.copy(),
                 'mask' : mask.copy(),
