@@ -105,6 +105,19 @@ class TileGenerator:
                                             self.height,
                                             self.size)
 
+        centroid_list = []
+        for _centroid in self.centroid_list:
+            if len(centroid_list) > 0:
+                calc_dist = lambda x: np.linalg.norm((x - np.array(_centroid)))
+                d_min = np.array(list(map(calc_dist, np.array(centroid_list)))).min()
+                if d_min > 250:
+                    centroid_list.append(_centroid)
+                    # print(_centroid, d_min)
+            else:
+                centroid_list.append(_centroid)
+
+        self.centroid_list = centroid_list[:]
+
         if DEBUG:
             self.centroid_list = self.centroid_list[:5]
 
@@ -477,7 +490,7 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
     ##########################################################################################
     # Define prediction parameters -----------------------------------------------------------
     ##########################################################################################
-    tile_size = int(256 * 3.5)
+    tile_size = int(256 * 4)
     tile_average_step = 320
     # tile_scale = 0.25
     tile_min_score = 0.25
@@ -745,22 +758,22 @@ if __name__ == '__main__':
         print(f"current commit: {model_sha}")
 
         changedFiles = [item.a_path for item in repo.index.diff(None) if item.a_path.endswith(".py")]
-        if len(changedFiles) > 0:
-            print("ABORT submission -- There are unstaged files:")
-            for _file in changedFiles:
-                print(f" * {_file}")
-
-        else:
-            submit(model_sha,
-                   server=args.Server,
-                   iterations=args.Iterations,
-                   fold=fold,
-                   scale=0.5,
-                   flip_predict=args.flip,
-                   checkpoint_sha=args.CheckpointSha,
-                   layer1=args.layer1,
-                   backbone='efficientnet-b0',
-                   )
+        # if len(changedFiles) > 0:
+        #     print("ABORT submission -- There are unstaged files:")
+        #     for _file in changedFiles:
+        #         print(f" * {_file}")
+        #
+        # else:
+        submit(model_sha,
+               server=args.Server,
+               iterations=args.Iterations,
+               fold=fold,
+               scale=0.5,
+               flip_predict=args.flip,
+               checkpoint_sha=args.CheckpointSha,
+               layer1=args.layer1,
+               backbone='efficientnet-b0',
+               )
 
     elif SERVER_RUN == 'kaggle':
         #         pass
