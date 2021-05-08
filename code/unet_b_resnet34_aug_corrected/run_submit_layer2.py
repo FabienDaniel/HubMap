@@ -477,7 +477,7 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
     ##########################################################################################
     # Define prediction parameters -----------------------------------------------------------
     ##########################################################################################
-    tile_size = 256 * 5
+    tile_size = int(256 * 3.5)
     tile_average_step = 320
     # tile_scale = 0.25
     tile_min_score = 0.25
@@ -550,10 +550,12 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
                 image_probability = get_probas(net, tile['tile_image'], flip_predict)
 
                 _cut = 0
+                if _cut > 0:
+                    _border_cut = image_probability[_cut: -_cut, _cut: -_cut]
+                else:
+                    _border_cut = image_probability
 
-                _border_cut = image_probability[_cut: -_cut, _cut: -_cut]
                 effective_tile_size = _border_cut.shape[0]
-
                 overall_probabilities.append(_border_cut)
 
                 ################################################################
@@ -563,12 +565,22 @@ def submit(sha, server, iterations, fold, scale, flip_predict, checkpoint_sha, l
 
                 if SERVER_RUN == 'local':
 
+                    # print("\n image shape:", tile['tile_image'].shape)
+
                     if server == 'local':
-                        _mask = tile['tile_mask'][_cut: -_cut, _cut: -_cut]
+                        if _cut > 0:
+                            _mask = tile['tile_mask'][_cut: -_cut, _cut: -_cut]
+                        else:
+                            _mask = tile['tile_mask']
                     else:
                         _mask = None
 
-                    _image = tile['tile_image'][:, _cut: -_cut, _cut: -_cut]
+                    if _cut > 0:
+                        _image = tile['tile_image'][:, _cut: -_cut, _cut: -_cut]
+                    else:
+                        _image = tile['tile_image']
+
+                    # print("\n image shape:", _image.shape)
 
                     image_name, x0, y0, dice, tp, tn, fp, fn = result_bookeeping(
                         id,
@@ -731,24 +743,24 @@ if __name__ == '__main__':
         repo = git.Repo(search_parent_directories=True)
         model_sha = repo.head.object.hexsha[:9]
         print(f"current commit: {model_sha}")
-        #
-        # changedFiles = [item.a_path for item in repo.index.diff(None) if item.a_path.endswith(".py")]
-        # if len(changedFiles) > 0:
-        #     print("ABORT submission -- There are unstaged files:")
-        #     for _file in changedFiles:
-        #         print(f" * {_file}")
-        #
-        # else:
-        submit(model_sha,
-               server=args.Server,
-               iterations=args.Iterations,
-               fold=fold,
-               scale=0.5,
-               flip_predict=args.flip,
-               checkpoint_sha=args.CheckpointSha,
-               layer1=args.layer1,
-               backbone='efficientnet-b0',
-               )
+
+        changedFiles = [item.a_path for item in repo.index.diff(None) if item.a_path.endswith(".py")]
+        if len(changedFiles) > 0:
+            print("ABORT submission -- There are unstaged files:")
+            for _file in changedFiles:
+                print(f" * {_file}")
+
+        else:
+            submit(model_sha,
+                   server=args.Server,
+                   iterations=args.Iterations,
+                   fold=fold,
+                   scale=0.5,
+                   flip_predict=args.flip,
+                   checkpoint_sha=args.CheckpointSha,
+                   layer1=args.layer1,
+                   backbone='efficientnet-b0',
+                   )
 
     elif SERVER_RUN == 'kaggle':
         #         pass
@@ -766,6 +778,6 @@ if __name__ == '__main__':
                flip_predict=True,
                checkpoint_sha=None,
                layer1='../input/hubmap-layer1/',
-               backbone='densenet121',
+               backbone='efficientnet-b0',
                )
 
